@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\RequireApiWriteAbility;
 use App\Http\Middleware\RequirePermission;
+use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetCitizenContext;
 use App\Http\Middleware\SetStaffContext;
 use App\Http\Middleware\SetTenantContext;
@@ -45,6 +46,7 @@ return Application::configure(basePath: dirname(__DIR__))
         }
 
         $middleware->throttleApi();
+        $middleware->append(SecurityHeaders::class);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         // API clients always get JSON errors, including for unknown routes.

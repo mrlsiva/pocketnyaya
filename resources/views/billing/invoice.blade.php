@@ -7,7 +7,7 @@
         <h1 class="h4 mb-0">{{ $invoice->invoice_number ?? 'Draft invoice' }} <span class="badge text-bg-light text-capitalize">{{ str_replace('_', ' ', $invoice->status) }}</span></h1>
         <div class="d-flex flex-wrap gap-2">
             @if ($invoice->status !== 'draft' && ! $redacted)
-                <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()">Print</button>
+                <button class="btn btn-outline-secondary btn-sm" type="button" data-print>Print</button>
                 <a class="btn btn-outline-secondary btn-sm" href="{{ route('practice.invoices.pdf', $invoice) }}">Download PDF</a>
             @endif
             @if ($canIssue)

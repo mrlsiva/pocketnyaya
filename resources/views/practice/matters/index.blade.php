@@ -6,7 +6,7 @@
     @include('practice.nav')
     <div class="d-flex flex-wrap justify-content-between gap-2 mb-3">
         <form class="d-flex gap-2" method="get">
-            <select class="form-select" name="status" aria-label="Filter by status" onchange="this.form.submit()">
+            <select class="form-select" name="status" aria-label="Filter by status" data-autosubmit>
                 <option value="">All statuses</option>
                 @foreach (['unallocated', 'open', 'on_hold', 'disposed', 'closed', 'archived'] as $option)
                     <option value="{{ $option }}" @selected($status === $option)>{{ ucfirst(str_replace('_', ' ', $option)) }}</option>

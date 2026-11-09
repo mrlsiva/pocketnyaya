@@ -7,7 +7,7 @@
     @include('billing.nav')
     <div class="row g-3">
         <div class="col-lg-8">
-            <form class="mb-2" method="get"><select class="form-select form-select-sm w-auto" name="status" aria-label="Filter by status" onchange="this.form.submit()">
+            <form class="mb-2" method="get"><select class="form-select form-select-sm w-auto" name="status" aria-label="Filter by status" data-autosubmit>
                 <option value="">All statuses</option>
                 @foreach (['draft', 'issued', 'partially_paid', 'paid', 'cancelled'] as $option)<option value="{{ $option }}" @selected($status === $option)>{{ ucfirst(str_replace('_', ' ', $option)) }}</option>@endforeach
             </select></form>
