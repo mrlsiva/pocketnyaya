@@ -1,0 +1,4 @@
+# This project sits under XAMPP's htdocs. Block direct access through the
+# default host so .env, vendor, storage and source files are never served.
+# The future pocketnyaya.test vhost must explicitly grant access to public/ only.
+Require all denied
