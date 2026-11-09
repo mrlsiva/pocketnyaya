@@ -364,6 +364,7 @@ Route::middleware(['auth', 'active'])->group(function () {
                 Route::get('retention', [ComplianceController::class, 'retention'])->middleware('pn.can:dpdp.retention_rules.draft|dpdp.retention_rules.record_approval')->name('retention');
                 Route::post('retention', [ComplianceController::class, 'storeRetention'])->middleware('pn.can:dpdp.retention_rules.draft')->name('retention.store');
                 Route::post('retention/{rule}/approve', [ComplianceController::class, 'approveRetention'])->middleware('pn.can:dpdp.retention_rules.record_approval')->name('retention.approve');
+                Route::post('retention-batches/{batch}', [ComplianceController::class, 'retentionBatch'])->middleware('pn.can:dpdp.retention_rules.draft|dpdp.retention_rules.record_approval')->name('retention.batch');
                 Route::middleware('pn.can:dpdp.legal_holds.manage')->group(function () {
                     Route::get('holds', [ComplianceController::class, 'holds'])->name('holds');
                     Route::post('holds', [ComplianceController::class, 'storeHold'])->name('holds.store');

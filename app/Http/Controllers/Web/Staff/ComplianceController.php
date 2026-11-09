@@ -12,6 +12,8 @@ use App\Models\RetentionRule;
 use App\Models\User;
 use App\Services\AuditLogWriter;
 use App\Services\ErasureService;
+use App\Services\RetentionService;
+use App\Support\AccessContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -71,7 +73,10 @@ class ComplianceController extends Controller
 
     public function retention(): View
     {
-        return view('staff.privacy.retention', ['rules' => RetentionRule::query()->orderBy('data_category')->orderByDesc('version')->get()]);
+        return view('staff.privacy.retention', [
+            'rules' => RetentionRule::query()->orderBy('data_category')->orderByDesc('version')->get(),
+            'batches' => DB::table('retention_batches')->whereIn('status', ['report', 'proposed', 'executed'])->orderByDesc('reported_at')->limit(50)->get(),
+        ]);
     }
 
     public function storeRetention(Request $request): RedirectResponse
@@ -81,7 +86,7 @@ class ComplianceController extends Controller
         $data = $request->validate([
             'data_category' => ['required', 'string', 'max:50', 'regex:/^[a-z_]+$/'],
             'retention_months' => ['nullable', 'integer', 'min:0', 'max:1200'],
-            'trigger_event' => ['required', Rule::in(['account_closure', 'matter_closure', 'financial_year_end', 'creation', 'settlement_execution', 'request_closure'])],
+            'trigger_event' => ['required', Rule::in(['account_closure', 'matter_closure', 'financial_year_end', 'creation', 'settlement_execution', 'request_closure', 'tenant_closure'])],
             'on_expiry' => ['required', Rule::in(['delete', 'anonymize', 'archive', 'review'])],
             'on_erasure_request' => ['required', Rule::in(['erase', 'anonymize', 'retain'])],
             'legal_basis_note' => ['required', 'string', 'max:2000'],
@@ -92,6 +97,25 @@ class ComplianceController extends Controller
         $rule->forceFill(['status' => 'draft', 'drafted_by' => $staff->id])->save();
 
         return back()->with('status', 'Draft saved. Another person must record counsel\'s approval.');
+    }
+
+    /** One person proposes a reported batch; a different person approves and it runs (owner decision 2026-11-09). */
+    public function retentionBatch(Request $request, string $batch, RetentionService $retention): RedirectResponse
+    {
+        /** @var User $staff */
+        $staff = $request->user();
+        $data = $request->validate(['action' => ['required', Rule::in(['propose', 'cancel', 'approve'])]]);
+
+        if ($data['action'] === 'approve') {
+            abort_unless(AccessContext::staffCan($staff, 'dpdp.retention_rules.record_approval'), 403);
+            $summary = $retention->approveAndExecute($batch, $staff);
+
+            return back()->with('status', "Disposal done: {$summary['done']} item(s). Skipped because of a hold: {$summary['skipped_hold']}. No longer due: {$summary['skipped_not_due']}.");
+        }
+        abort_unless(AccessContext::staffCan($staff, 'dpdp.retention_rules.draft'), 403);
+        $data['action'] === 'propose' ? $retention->propose($batch, $staff) : $retention->cancel($batch, $staff);
+
+        return back()->with('status', $data['action'] === 'propose' ? 'Proposed. A different person must approve it.' : 'Proposal cancelled.');
     }
 
     public function approveRetention(Request $request, RetentionRule $rule): RedirectResponse
