@@ -25,6 +25,7 @@ Personal endpoints need no extra header. For practice endpoints, marked **T** be
 | 410 | The file has been permanently erased |
 | 422 | Validation failed, or the record's status doesn't allow this |
 | 429 | Too many attempts |
+| 503 | An outside service (payments, video, eSign and so on) isn't set up yet. The body names it in `integration` |
 
 ## Endpoints
 
@@ -49,6 +50,16 @@ Personal endpoints need no extra header. For practice endpoints, marked **T** be
 | GET | `/me/notifications` | Latest 50 |
 | POST | `/me/notifications/{id}/read` | Mark as read |
 | POST | `/auth/logout`, `/auth/email/resend` | Session and verification |
+
+### Verification (advocates and mediators)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/me/verification` | My advocate and mediator status, requests and uploaded files |
+| POST | `/me/verification/advocate` | Submit for verification. The advocate profile must be completed on the web first |
+| POST | `/me/verification/mediator` | Apply as a mediator: `accreditation_body`, `accreditation_number`, optional `accreditation_valid_until` and `categories` |
+| POST | `/me/verification/{requestId}/documents` | Upload a supporting file as multipart: `file`, `title`, `category: verification` |
+| PUT | `/me/directory-listing` | `listed: true` or `false`. Verified advocates only |
 
 ### Documents
 
@@ -137,6 +148,11 @@ Always label a settlement "Settlement agreement (unsigned)". Accepting records a
 | POST | `/invoices/{id}/expenses` | Add reimbursable expenses: `expenses` (list of IDs). Pure-agent expenses are refused for now |
 | GET | `/invoices/{id}/pdf` | The issued invoice as a PDF. 422 for drafts, 403 if you only see it redacted |
 | GET, POST | `/time-entries` | Own time |
+| GET | `/team` | Members with their roles, the roles you may grant, and pending invitations |
+| POST | `/team/invitations` | Invite: `email`, `role` |
+| DELETE | `/team/invitations/{id}` | Revoke an invitation |
+| PUT | `/team/{userId}/role` | Change a member's role: `role` |
+| DELETE | `/team/{userId}` | Remove a member from this practice only. Their account and other practices are untouched |
 
 ## Rules for the app
 
