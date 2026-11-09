@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Support\AccessContext;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -18,6 +19,17 @@ class SetCitizenContext
         setPermissionsTeamId(AccessContext::platformTenantId());
         $request->attributes->set('pn_context', 'citizen');
 
-        return $next($request);
+        $user = $request->user();
+        if (! config('pocketnyaya.db_isolation') || $user === null) {
+            return $next($request);
+        }
+
+        // C52: personal-vault and customer views now see only this person's rows.
+        DB::statement('CALL pn_bind_user_context(?, ?)', [$user->getAuthIdentifier(), (int) config('pocketnyaya.db_context_ttl')]);
+        try {
+            return $next($request);
+        } finally {
+            DB::statement('CALL pn_clear_context()');
+        }
     }
 }

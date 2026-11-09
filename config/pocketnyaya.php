@@ -20,6 +20,12 @@ return [
     // Provisional. Counsel must confirm the response period for privacy requests.
     'privacy_request_days' => 30,
 
+    // C52 tenant-isolation layer. Off until the app connects as pn_app and reads firm data
+    // through the v_* views (see database/sql/isolation-accounts.sql). When on, each request
+    // binds its practice or user to the database connection for this many seconds.
+    'db_isolation' => (bool) env('DB_ISOLATION', false),
+    'db_context_ttl' => 900,
+
     // Closing a practice. Placeholder until counsel confirms how long the export stays open.
     'offboarding_export_days' => 30,
 

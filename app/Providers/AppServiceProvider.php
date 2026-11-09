@@ -31,14 +31,14 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(KeyProvider::class, LocalKeyProvider::class);
 
         // Phase 4 outside services. Each stays on the switched-off driver until a real one is
-        // written, approved and selected in .env (IntegrationRegistry::IMPLEMENTED lists those).
+        // written, approved and selected in .env (IntegrationRegistry lists those).
         foreach ([
             PaymentGateway::class => 'payments', VideoProvider::class => 'video', ESignProvider::class => 'esign',
             CourtDataProvider::class => 'court_data', AiDrafting::class => 'ai', MessageSender::class => 'messaging',
         ] as $contract => $key) {
             $this->app->bind($contract, function () use ($key) {
                 $driver = (string) config("integrations.{$key}.driver", 'none');
-                $class = IntegrationRegistry::IMPLEMENTED[$key][$driver] ?? null;
+                $class = IntegrationRegistry::driverClass($key, $driver);
 
                 return $class !== null ? $this->app->make($class) : new NotConfiguredDriver(IntegrationRegistry::SERVICES[$key][0]);
             });

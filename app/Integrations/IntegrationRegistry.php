@@ -21,7 +21,13 @@ class IntegrationRegistry
      *
      * @var array<string, array<string, class-string>>
      */
-    public const IMPLEMENTED = [];
+    private static array $implemented = [];
+
+    /** @return class-string|null the approved driver class, or null to stay switched off */
+    public static function driverClass(string $service, string $driver): ?string
+    {
+        return self::$implemented[$service][$driver] ?? null;
+    }
 
     /** @return list<array{key: string, name: string, purpose: string, driver: string, active: bool}> */
     public function status(): array
@@ -29,7 +35,7 @@ class IntegrationRegistry
         $rows = [];
         foreach (self::SERVICES as $key => [$name, $purpose]) {
             $driver = (string) config("integrations.{$key}.driver", 'none');
-            $rows[] = ['key' => $key, 'name' => $name, 'purpose' => $purpose, 'driver' => $driver, 'active' => isset(self::IMPLEMENTED[$key][$driver])];
+            $rows[] = ['key' => $key, 'name' => $name, 'purpose' => $purpose, 'driver' => $driver, 'active' => self::driverClass($key, $driver) !== null];
         }
 
         return $rows;

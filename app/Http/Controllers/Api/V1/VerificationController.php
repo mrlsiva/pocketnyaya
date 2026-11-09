@@ -30,13 +30,13 @@ class VerificationController extends Controller
             ->where(fn ($q) => $q->when($advocate !== null, fn ($w) => $w->orWhere('advocate_profile_id', $advocate?->id))
                 ->when($mediator !== null, fn ($w) => $w->orWhere('mediator_profile_id', $mediator?->id)))
             ->when($advocate === null && $mediator === null, fn ($q) => $q->whereRaw('1 = 0'))
-            ->latest()->get(['id', 'advocate_profile_id', 'mediator_profile_id', 'status', 'created_at']);
+            ->latest('submitted_at')->get(['id', 'advocate_profile_id', 'mediator_profile_id', 'status', 'submitted_at']);
 
         return response()->json([
             'advocate' => $advocate === null ? null : ['verification_status' => $advocate->verification_status, 'is_directory_listed' => (bool) $advocate->is_directory_listed],
             'mediator' => $mediator === null ? null : ['verification_status' => $mediator->verification_status],
             'requests' => $requests->map(fn (VerificationRequest $r) => [
-                'id' => $r->id, 'for' => $r->advocate_profile_id !== null ? 'advocate' : 'mediator', 'status' => $r->status, 'created_at' => $r->created_at,
+                'id' => $r->id, 'for' => $r->advocate_profile_id !== null ? 'advocate' : 'mediator', 'status' => $r->status, 'submitted_at' => $r->submitted_at,
                 'documents' => Document::query()->where('verification_request_id', $r->id)->get(['id', 'title', 'created_at']),
             ]),
         ]);

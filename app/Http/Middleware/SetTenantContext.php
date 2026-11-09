@@ -50,6 +50,16 @@ class SetTenantContext
         $user->unsetRelation('roles')->unsetRelation('permissions');
         $request->attributes->set('pn_context', 'tenant');
 
-        return $next($request);
+        if (! config('pocketnyaya.db_isolation')) {
+            return $next($request);
+        }
+
+        // C52: the database itself now limits this connection to this practice.
+        DB::statement('CALL pn_bind_context(?, ?, ?)', [$user->id, $tenant, (int) config('pocketnyaya.db_context_ttl')]);
+        try {
+            return $next($request);
+        } finally {
+            DB::statement('CALL pn_clear_context()');
+        }
     }
 }
