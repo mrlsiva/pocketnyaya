@@ -40,6 +40,8 @@ class TeamService
         if ($isMember || $isPending) {
             throw ValidationException::withMessages(['email' => 'That person is already a member or has a pending invitation.']);
         }
+        // Pending invitations count towards the plan, so accepting one never goes over it.
+        app(SubscriptionLimits::class)->ensureRoom($tenantId, 'max_members', 1, 'email');
 
         $token = Str::random(48);
         DB::table('tenant_invitations')->insert([

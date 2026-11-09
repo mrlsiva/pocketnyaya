@@ -7,6 +7,7 @@ use App\Models\DocumentAccessLog;
 use App\Models\DocumentKey;
 use App\Models\DocumentVersion;
 use App\Models\User;
+use App\Services\SubscriptionLimits;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -26,6 +27,9 @@ class DocumentVault
 
     public function addVersion(Document $document, UploadedFile $file, User $user, ?string $note = null): DocumentVersion
     {
+        if ($document->scope === 'tenant' && $document->tenant_id !== null) {
+            app(SubscriptionLimits::class)->ensureRoom($document->tenant_id, 'max_storage_mb', (int) $file->getSize(), 'file');
+        }
         $versionId = (string) Str::uuid7();
         $dek = random_bytes(32);
         $noncePrefix = random_bytes(8);

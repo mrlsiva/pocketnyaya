@@ -19,6 +19,15 @@
                                     <button class="btn btn-outline-secondary btn-sm" name="status" value="{{ $tenant->status === 'active' ? 'suspended' : 'active' }}" type="submit">{{ $tenant->status === 'active' ? 'Suspend' : 'Reactivate' }}</button>
                                 </form>
                             @endif
+                            @if ($canManagePlans && $tenant->status !== 'closed')
+                                <form class="d-flex gap-1 mt-1" method="post" action="{{ route('staff.admin.tenants.plan', $tenant) }}">@csrf @method('put')
+                                    <select class="form-select form-select-sm" name="plan_id" aria-label="Plan">
+                                        <option value="">No plan (no limits)</option>
+                                        @foreach ($plans as $plan)<option value="{{ $plan->id }}" @selected(($currentPlans[$tenant->id] ?? null) === $plan->id)>{{ $plan->name }}</option>@endforeach
+                                    </select>
+                                    <button class="btn btn-outline-secondary btn-sm" type="submit">Set plan</button>
+                                </form>
+                            @endif
                             @if ($tenant->status !== 'closed' && \App\Support\AccessContext::staffCan(auth()->user(), 'platform.tenants.close'))
                                 <a class="small" href="{{ route('staff.admin.offboarding.create', $tenant) }}">Close practice…</a>
                             @endif

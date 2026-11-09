@@ -4,6 +4,21 @@
 @section('content')
     <h1 class="h4 mb-3">Practice settings</h1>
     @include('practice.nav')
+    @if ($subscription)
+        <div class="card shadow-sm mb-3"><div class="card-body">
+            <h2 class="h6">Plan</h2>
+            @if ($subscription['plan'])
+                <p class="small mb-2">{{ $subscription['plan']->name }} <span class="text-body-secondary text-capitalize">({{ str_replace('_', ' ', $subscription['plan']->status) }})</span></p>
+            @else
+                <p class="small mb-2">No plan assigned, so there are no limits.</p>
+            @endif
+            <div class="row small">
+                @foreach (\App\Services\SubscriptionLimits::LIMITS as $key => $label)
+                    <div class="col-sm-4">{{ ucfirst($label) }}: {{ $subscription['usage'][$key]['used'] }}{{ $subscription['usage'][$key]['limit'] !== null ? ' of '.$subscription['usage'][$key]['limit'] : '' }}</div>
+                @endforeach
+            </div>
+        </div></div>
+    @endif
     <div class="row g-3">
         @if ($canViewSettings)
             <div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-body">

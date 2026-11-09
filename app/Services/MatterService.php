@@ -18,6 +18,7 @@ class MatterService
     public function create(User $user, array $data): Matter
     {
         $tenant = (string) AccessContext::currentTenantId();
+        app(SubscriptionLimits::class)->ensureRoom($tenant, 'max_active_matters', 1, 'title');
 
         return DB::transaction(function () use ($user, $data, $tenant) {
             $year = now()->format('Y');
@@ -75,6 +76,7 @@ class MatterService
 
     public function reopen(Matter $matter): void
     {
+        app(SubscriptionLimits::class)->ensureRoom($matter->tenant_id, 'max_active_matters', 1, 'status');
         $matter->forceFill(['status' => 'open', 'closed_at' => null])->save();
     }
 

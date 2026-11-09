@@ -8,6 +8,8 @@ use App\Models\TenantOffboarding;
 use App\Models\User;
 use App\Services\AuditLogWriter;
 use App\Services\SecurityRevocationService;
+use App\Services\SubscriptionLimits;
+use App\Support\AccessContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -24,11 +26,22 @@ class AdminController extends Controller
     {
         $search = trim((string) $request->query('q'));
 
+        $tenants = Tenant::query()->where('type', '<>', 'platform')
+            ->when($search !== '', fn ($q) => $q->where('name', 'like', '%'.addcslashes($search, '%_\\').'%'))
+            ->orderBy('name')->paginate(25, ['id', 'type', 'name', 'status', 'created_at'])->withQueryString();
+        $limits = app(SubscriptionLimits::class);
+        /** @var array<string, string|null> $currentPlans */
+        $currentPlans = [];
+        foreach ($tenants->items() as $t) {
+            $currentPlans[(string) $t->id] = $limits->currentPlan((string) $t->id)?->id;
+        }
+
         return view('staff.admin.tenants', [
-            'tenants' => Tenant::query()->where('type', '<>', 'platform')
-                ->when($search !== '', fn ($q) => $q->where('name', 'like', '%'.addcslashes($search, '%_\\').'%'))
-                ->orderBy('name')->paginate(25, ['id', 'type', 'name', 'status', 'created_at'])->withQueryString(),
+            'tenants' => $tenants,
             'search' => $search,
+            'currentPlans' => $currentPlans,
+            'plans' => DB::table('subscription_plans')->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'canManagePlans' => $request->user() !== null && AccessContext::staffCan($request->user(), 'platform.subscription_plans.manage'),
         ]);
     }
 
@@ -115,6 +128,40 @@ class AdminController extends Controller
         DB::table('subscription_plans')->insert($data + ['id' => (string) Str::uuid7(), 'features' => '[]', 'limits' => '{}', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()]);
 
         return back()->with('status', 'Plan added.');
+    }
+
+    /** Empty means unlimited. Limits stop new additions only; existing data is never removed. */
+    public function updatePlanLimits(Request $request, string $plan): RedirectResponse
+    {
+        abort_if(DB::table('subscription_plans')->where('id', $plan)->doesntExist(), 404);
+        $rules = [];
+        foreach (array_keys(SubscriptionLimits::LIMITS) as $key) {
+            $rules[$key] = ['nullable', 'integer', 'min:0', 'max:10000000'];
+        }
+        $data = array_filter($request->validate($rules), fn ($v) => $v !== null && $v !== '');
+        DB::table('subscription_plans')->where('id', $plan)->update(['limits' => json_encode(array_map('intval', $data)), 'updated_at' => now()]);
+        $this->audit->record('platform.plan_limits_changed', 'subscription_plan', $plan, null, null, $data);
+
+        return back()->with('status', 'Plan limits saved.');
+    }
+
+    /** Puts a practice on a plan. Any current plan ends now, and the record of it is kept. */
+    public function assignPlan(Request $request, Tenant $tenant): RedirectResponse
+    {
+        abort_if($tenant->type === 'platform' || $tenant->status === 'closed', 404);
+        $data = $request->validate(['plan_id' => ['nullable', 'uuid']]);
+        abort_if(! empty($data['plan_id']) && DB::table('subscription_plans')->where(['id' => $data['plan_id'], 'is_active' => true])->doesntExist(), 422, 'That plan is not available.');
+
+        DB::transaction(function () use ($tenant, $data) {
+            DB::table('tenant_subscriptions')->where('tenant_id', $tenant->id)->whereIn('status', ['trialing', 'active', 'past_due'])
+                ->update(['status' => 'cancelled', 'ends_at' => now(), 'updated_at' => now()]);
+            if (! empty($data['plan_id'])) {
+                DB::table('tenant_subscriptions')->insert(['id' => (string) Str::uuid7(), 'tenant_id' => $tenant->id, 'plan_id' => $data['plan_id'], 'status' => 'active', 'starts_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+            }
+            $this->audit->record('platform.plan_assigned', 'tenant', $tenant->id, $tenant->id, null, ['plan_id' => $data['plan_id'] ?? null]);
+        });
+
+        return back()->with('status', empty($data['plan_id']) ? 'Plan removed. The practice has no limits.' : 'Plan assigned.');
     }
 
     public function togglePlan(string $plan): RedirectResponse

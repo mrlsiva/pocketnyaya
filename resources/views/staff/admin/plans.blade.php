@@ -10,7 +10,16 @@
                 <tbody>
                     @forelse ($plans as $plan)
                         <tr class="{{ $plan->is_active ? '' : 'text-body-secondary' }}">
-                            <td>{{ $plan->name }}<div class="small text-body-secondary">{{ $plan->code }}</div></td>
+                            <td>{{ $plan->name }}<div class="small text-body-secondary">{{ $plan->code }}</div>
+                                @php($limits = json_decode((string) $plan->limits, true) ?: [])
+                                <form class="row g-1 mt-1" method="post" action="{{ route('staff.admin.plans.limits', $plan->id) }}">@csrf @method('put')
+                                    @foreach (\App\Services\SubscriptionLimits::LIMITS as $key => $label)
+                                        <div class="col-4"><input class="form-control form-control-sm" name="{{ $key }}" value="{{ $limits[$key] ?? '' }}" placeholder="No limit" title="Maximum {{ $label }}" aria-label="Maximum {{ $label }}"></div>
+                                    @endforeach
+                                    <div class="col-12 small text-body-secondary">Members · open matters · storage in MB. Empty means no limit.
+                                        <button class="btn btn-link btn-sm p-0 align-baseline" type="submit">Save limits</button></div>
+                                </form>
+                            </td>
                             <td class="text-capitalize">{{ $plan->billing_period }}</td>
                             <td class="text-end">{{ $plan->price === null ? 'Not set' : \App\Support\Money::format($plan->price) }}</td>
                             <td class="text-end"><form method="post" action="{{ route('staff.admin.plans.toggle', $plan->id) }}">@csrf<button class="btn btn-link btn-sm p-0" type="submit">{{ $plan->is_active ? 'Turn off' : 'Turn on' }}</button></form></td>

@@ -325,6 +325,8 @@ Route::middleware(['auth', 'active'])->group(function () {
                     Route::get('plans', [AdminController::class, 'plans'])->name('plans');
                     Route::post('plans', [AdminController::class, 'storePlan'])->name('plans.store');
                     Route::post('plans/{plan}/toggle', [AdminController::class, 'togglePlan'])->name('plans.toggle');
+                    Route::put('plans/{plan}/limits', [AdminController::class, 'updatePlanLimits'])->name('plans.limits');
+                    Route::put('tenants/{tenant}/plan', [AdminController::class, 'assignPlan'])->name('tenants.plan');
                 });
                 Route::middleware('pn.can:platform.tenants.close')->group(function () {
                     Route::get('offboarding', [OffboardingController::class, 'index'])->name('offboarding.index');

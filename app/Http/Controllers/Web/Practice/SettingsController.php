@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Tenant;
 use App\Models\User;
 use App\Services\AuditLogWriter;
+use App\Services\SubscriptionLimits;
 use App\Support\AccessContext;
 use App\Support\MatterAccess;
 use Illuminate\Http\RedirectResponse;
@@ -36,6 +37,9 @@ class SettingsController extends Controller
             'canBranches' => AccessContext::tenantCan($user, 'tenant.branches.manage'),
             'canGroups' => AccessContext::tenantCan($user, 'tenant.practice_groups.manage'),
             'canAvailability' => AccessContext::tenantCan($user, 'tenant.availability.manage_own'),
+            // tenant.subscription.view: the plan and how much of it is used.
+            'subscription' => AccessContext::tenantCan($user, 'tenant.subscription.view')
+                ? ['plan' => app(SubscriptionLimits::class)->currentPlan($tenant), 'usage' => app(SubscriptionLimits::class)->usage($tenant)] : null,
         ]);
     }
 
