@@ -37,7 +37,8 @@ Values are set on the server only, never committed, and never pasted into chat o
 | `DOCUMENT_KEY_DIR` | outside the web root, on the encrypted volume, readable only by the PHP user. Replace it with a key management service before launch |
 | `MAIL_*` | a mail provider with Indian data handling, after approval |
 | `LOG_CHANNEL` | `daily`, with logs shipped to the monitoring service |
-| `DB_ISOLATION` | `false` until the switch-over, then `true` |
+| `DB_ISOLATION` | `false` until both accounts exist (section 4), then `true` |
+| `PLATFORM_DB_USERNAME`, `PLATFORM_DB_PASSWORD` | `pn_platform`, for staff screens, jobs and the practice export |
 | `PAYMENTS_DRIVER`, `VIDEO_DRIVER`, `ESIGN_DRIVER`, `COURT_DATA_DRIVER`, `AI_DRIVER`, `MESSAGING_DRIVER` | `none` until each service is approved |
 
 ## 3. Environment setup
@@ -54,7 +55,13 @@ Values are set on the server only, never committed, and never pasted into chat o
 2. Create a **migration account** with rights on this database only. The database administrator runs migrations, because they create triggers, views and procedures (C56).
 3. Run `php artisan migrate --force`, then the production seeders only: roles, platform, reference data, screening rules and privacy. **Never run `DemoSeeder` in production.**
 4. Create the first two Super Admins by hand, then use the propose and approve screen for every other one.
-5. After the isolation switch-over: run `php artisan pocketnyaya:isolation-grants > grants.sql`, set the password privately, run it as the administrator, and point the app at `pn_app`.
+5. Switch on tenant isolation:
+   1. Run `php artisan pocketnyaya:isolation-grants > grants.sql`, then replace both password placeholders privately.
+   2. Run the file as the administrator. It creates `pn_app` (the views only) and `pn_platform` (base-table data, no DDL).
+   3. Check that `pn_privileged_accounts` lists only the administrator account.
+   4. Set `DB_USERNAME=pn_app`, `PLATFORM_DB_USERNAME=pn_platform`, both passwords and `DB_ISOLATION=true`. Then run `php artisan config:cache`.
+   5. Run future migrations with `php artisan migrate --database=platform --force` as the administrator account.
+   6. Smoke test a practice page, a customer page and a staff page. Then confirm that a practice can't open another practice's matter.
 
 ## 5. Queue and scheduler
 

@@ -54,7 +54,8 @@ return Application::configure(basePath: dirname(__DIR__))
             fn (Request $request) => $request->is('api/*') || $request->expectsJson()
         );
 
-        // A switched-off outside service: a plain message, never a server error.
+        // A switched-off outside service: a plain message, never a server error, and not an error in the log.
+        $exceptions->dontReport(IntegrationNotConfigured::class);
         $exceptions->render(function (IntegrationNotConfigured $e, Request $request) {
             return $request->is('api/*') || $request->expectsJson()
                 ? response()->json(['message' => $e->getMessage(), 'integration' => $e->integration], 503)

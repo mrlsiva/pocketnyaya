@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\User;
 use App\Support\AccessContext;
+use App\Support\Isolation;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -50,16 +51,16 @@ class SetTenantContext
         $user->unsetRelation('roles')->unsetRelation('permissions');
         $request->attributes->set('pn_context', 'tenant');
 
-        if (! config('pocketnyaya.db_isolation')) {
+        if (! Isolation::enabled()) {
             return $next($request);
         }
 
         // C52: the database itself now limits this connection to this practice.
-        DB::statement('CALL pn_bind_context(?, ?, ?)', [$user->id, $tenant, (int) config('pocketnyaya.db_context_ttl')]);
+        Isolation::bindTenant($user->id, $tenant);
         try {
             return $next($request);
         } finally {
-            DB::statement('CALL pn_clear_context()');
+            Isolation::clear();
         }
     }
 }

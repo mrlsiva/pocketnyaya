@@ -24,7 +24,9 @@ The app connects as the local `root` account, not a limited account. This is for
 | Closing a practice (2026-11-09) | **Built in all 7 stages, with final deletion switched off** until retention rules are approved. At retention the practice is marked closed and deleted, and its data is kept. The export holds records and decrypted documents |
 | Credit notes (2026-11-09) | **Own CN series, and they reduce the original's balance**, with tax reversed in proportion. A CA may correct this |
 | Phase 4 integrations (2026-11-09) | **Switched-off adapters** behind interfaces. Nothing calls out until a driver is approved |
-| Isolation layer (2026-11-09) | **Built on MariaDB, switched off** until the app reads through the views and connects as `pn_app` |
+| Isolation layer (2026-11-09) | **Two connections.** The main connection uses the `v_` prefix as `pn_app`, so every table resolves to its filtered view. Staff screens, console jobs and the practice export use the `platform` connection as `pn_platform`. It switches on with `DB_ISOLATION=true` once both accounts exist |
+| Subscriptions (2026-11-09) | **No plan means no limits.** Plans can limit members (pending invitations count), open matters and document storage. Limits stop new additions only |
+| Retention (2026-11-09) | **Nightly dry run, two-person disposal.** Supported categories: `closed_practice_documents` (crypto-shred) and `closed_practice_clients` (anonymise), counted from the new `tenant_closure` trigger |
 
 ### `erased_at`: what C44 requires
 
@@ -70,6 +72,10 @@ The column is `DATETIME(6) NULL` on both tables, following the approved `timesta
 | Integration drivers | `config/integrations.php`, every service `none`. An unknown driver name also stays off | Phase 4 needs approval per provider |
 | `v_tenant_memberships` | Checks the bound context but not the membership again on each statement | MariaDB makes a view read-only when its filter reads the same table. The bind-time check and the expiry of at most 1 hour cover it |
 | Isolation procedures | Don't check the caller's account name | EXECUTE is granted to `pn_app` alone |
+| `pn_privileged_accounts` | Accounts listed here see all rows through the views: only the migration or administrator account. `pn_app` and `pn_platform` must never be listed | Lets migrations, seeders and tests work through the same views. **Security-critical, for review** |
+| Same-named views | Every base table has a `v_<table>` view. Firm tables are filtered to the bound practice. Documents, versions, keys and shares follow scope, owner and active shares. Clients and consultations also show the customer's own rows. Other tables pass through (T4) | Lets Laravel's table prefix switch the whole app without query changes |
+| Request binding | Every signed-in request binds the person. Practice requests bind the practice instead, and the binding is cleared when the request ends | Workspaces, profile and customer pages need the person's own rows |
+| Retention record | `retention_batches` holds ids, counts and a hash, never content, and can't be deleted. Clients are anonymised (name `Erased client`, contact and tax details cleared) instead of deleted | Invoices and matters still reference them. **Counsel and a CA should confirm** |
 | T3 tables | Read through join views. `pn_app` may INSERT but not read the base tables | The T3 write procedures aren't built |
 | Audit and access logs | `pn_app` can SELECT and INSERT on the base tables | Staff and firm audit screens read them directly. Reads aren't isolated by the database |
 | `document_keys` | `pn_app` can read and write them | Decryption happens in PHP, not in a database procedure |
@@ -106,10 +112,10 @@ Adapters exist for all of these, switched off (Staff → Integrations).
 
 ### Not built yet
 
-- **Isolation switch-over:** the layer exists (context table, procedures, views, `pocketnyaya:isolation-grants`), but the app still queries base tables as `root`. Moving every firm query onto the `v_*` views, building the T3 write procedures and creating `pn_app` remain
-- **Retention enforcement:** rules can be drafted and approved, but no job applies them. The C60 exemption for append-only tables is also not built, and neither is partition or archive maintenance
+- **Isolation accounts:** the switch-over is built and tested (`IsolationModeTest`). Switching it on needs `pn_app` and `pn_platform`, created from `php artisan pocketnyaya:isolation-grants` with passwords set privately. The T3 write procedures aren't built: T3 rows are written through filtered views instead
+- **Retention beyond closed practices:** only the two closed-practice categories are enforced. Audit log retention (the C60 `pn_retention` exemption) and the WORM archive aren't built, so audit rows are kept indefinitely
 - **P1 emergency staff access:** rejected, so correctly absent
-- **Subscription enforcement:** plans can be managed, but limits and feature gates aren't applied. The design never defines the limits
+- **Subscription feature gates:** limits are enforced, but features aren't gated by plan, because no features are defined per plan
 - **Screens not built:** comment editing, and comment moderation by report only. The advocate profile form is web-only
 - **Tests still PENDING from the approved plans:** TX-C1 to TX-C9 concurrency, V1, the remaining VW and IS cases (a subset runs in `IsolationLayerTest`), PV (needs `pn_app`), DS16 to DS21 as named, CT13 to CT16 for a database-side consent hash, RT, PB and PT
 

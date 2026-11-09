@@ -13,6 +13,7 @@ use App\Integrations\IntegrationRegistry;
 use App\Models\User;
 use App\Services\Documents\KeyProvider;
 use App\Services\Documents\LocalKeyProvider;
+use App\Support\Isolation;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Schema\Blueprint;
@@ -50,6 +51,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Scheduled jobs, queue workers and artisan commands read across practices, so with isolation
+        // on they use the platform connection. Tests keep the main connection.
+        if (Isolation::enabled() && $this->app->runningInConsole() && ! $this->app->runningUnitTests()) {
+            Isolation::usePlatform();
+        }
+
         // The RBAC tables only accept model_type = 'user' (C26).
         Relation::enforceMorphMap(['user' => User::class]);
 

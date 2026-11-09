@@ -17,6 +17,13 @@ use Tests\Feature\Practice\PracticeTestCase;
  */
 class IsolationLayerTest extends PracticeTestCase
 {
+    protected function setUp(): void
+    {
+        parent::setUp();
+        // Test as an unprivileged account would see the views. Rolled back with the test.
+        DB::statement('DELETE FROM pn_privileged_accounts');
+    }
+
     private function bind(User $user, string $tenant, int $ttl = 300): void
     {
         DB::statement('CALL pn_bind_context(?, ?, ?)', [$user->id, $tenant, $ttl]);
@@ -146,19 +153,22 @@ class IsolationLayerTest extends PracticeTestCase
         $this->assertSame(0, $this->rowsIn('v_tenant_documents'), 'A user context sees no firm documents.');
     }
 
-    public function test_grant_script_keeps_pn_app_off_firm_tables_and_prints_no_real_password(): void
+    public function test_grant_script_gives_pn_app_views_only_and_prints_no_real_password(): void
     {
         $this->assertSame(0, Artisan::call('pocketnyaya:isolation-grants'));
         $sql = Artisan::output();
+        $app = array_filter(explode(PHP_EOL, $sql), fn ($l) => str_contains($l, "'pn_app'@"));
 
-        $this->assertStringContainsString("IDENTIFIED BY 'REPLACE_WITH_A_STRONG_PASSWORD'", $sql);
-        foreach (['matters', 'clients', 'invoices', 'documents', 'tenant_memberships', 'pn_access_context'] as $table) {
-            $this->assertDoesNotMatchRegularExpression("/ON `[^`]+`\\.`{$table}` TO/", $sql, "pn_app must not reach {$table} directly");
+        $this->assertStringContainsString("IDENTIFIED BY 'REPLACE_WITH_A_STRONG_PASSWORD_FOR_PN_APP'", $sql);
+        foreach ($app as $line) {
+            $this->assertMatchesRegularExpression('/(ON `[^`]+`\.`v_[a-z_]+` TO|ON PROCEDURE|CREATE USER)/', $line, "pn_app may reach views and procedures only: {$line}");
         }
-        $this->assertMatchesRegularExpression('/GRANT SELECT, INSERT, UPDATE, DELETE ON `[^`]+`\.`v_matters` TO/', $sql);
-        $this->assertMatchesRegularExpression('/GRANT SELECT ON `[^`]+`\.`v_document_versions` TO/', $sql);
-        $this->assertMatchesRegularExpression('/GRANT SELECT, INSERT ON `[^`]+`\.`audit_logs` TO/', $sql);
-        $this->assertMatchesRegularExpression('/GRANT EXECUTE ON PROCEDURE `[^`]+`\.`pn_bind_context` TO/', $sql);
+        $this->assertMatchesRegularExpression('/GRANT SELECT, INSERT, UPDATE, DELETE ON `[^`]+`\.`v_matters` TO .pn_app/', $sql);
+        $this->assertMatchesRegularExpression('/GRANT SELECT, INSERT ON `[^`]+`\.`v_audit_logs` TO .pn_app/', $sql);
+        $this->assertMatchesRegularExpression('/GRANT EXECUTE ON PROCEDURE `[^`]+`\.`pn_bind_context` TO .pn_app/', $sql);
+        $this->assertMatchesRegularExpression('/GRANT SELECT, INSERT, UPDATE, DELETE ON `[^`]+`\.`matters` TO .pn_platform/', $sql);
+        $this->assertDoesNotMatchRegularExpression('/`(pn_access_context|pn_privileged_accounts)` TO/', $sql);
+        $this->assertDoesNotMatchRegularExpression('/GRANT (ALL|.*(DROP|ALTER|CREATE))/', $sql);
     }
 
     public function test_every_firm_table_has_a_writable_checked_view(): void

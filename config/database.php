@@ -73,7 +73,9 @@ return [
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
-            'prefix' => '',
+            // C52 switch-over: with DB_ISOLATION on, every table name resolves to its filtered v_ view,
+            // and DB_USERNAME must be the limited pn_app account.
+            'prefix' => env('DB_ISOLATION', false) ? 'v_' : '',
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => 'InnoDB',
@@ -82,6 +84,30 @@ return [
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
             ]) + [
+                PDO::MYSQL_ATTR_MULTI_STATEMENTS => false,
+                PDO::ATTR_PERSISTENT => false,
+                PDO::ATTR_EMULATE_PREPARES => false,
+            ] : [],
+        ],
+
+        // Staff screens, scheduled jobs, migrations and the practice export (owner decision 2026-11-09).
+        // Base tables, no prefix. Uses pn_platform once it exists; until then the main account.
+        'platform' => [
+            'driver' => 'mariadb',
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '3306'),
+            'database' => env('DB_DATABASE', 'laravel'),
+            'username' => env('PLATFORM_DB_USERNAME', env('DB_USERNAME', 'root')),
+            'password' => env('PLATFORM_DB_PASSWORD', env('DB_PASSWORD', '')),
+            'unix_socket' => env('DB_SOCKET', ''),
+            'charset' => env('DB_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => 'InnoDB',
+            'timezone' => '+00:00',
+            'options' => extension_loaded('pdo_mysql') ? [
                 PDO::MYSQL_ATTR_MULTI_STATEMENTS => false,
                 PDO::ATTR_PERSISTENT => false,
                 PDO::ATTR_EMULATE_PREPARES => false,

@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Models\User;
 use App\Support\AccessContext;
+use App\Support\Isolation;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -32,6 +33,10 @@ class SetStaffContext
             return redirect()->route('mfa.challenge');
         }
 
+        // Staff screens read across practices (metadata only, DA-1), so they use the platform connection.
+        if (Isolation::enabled()) {
+            Isolation::usePlatform();
+        }
         setPermissionsTeamId(AccessContext::platformTenantId());
         $user->unsetRelation('roles')->unsetRelation('permissions');
         $request->attributes->set('pn_context', 'staff');

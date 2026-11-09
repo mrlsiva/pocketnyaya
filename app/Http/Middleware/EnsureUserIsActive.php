@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\User;
+use App\Support\Isolation;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -25,6 +26,17 @@ class EnsureUserIsActive
             return redirect()->route('login')->withErrors(['email' => 'This account is not active.']);
         }
 
-        return $next($request);
+        if (! $user instanceof User || ! Isolation::enabled()) {
+            return $next($request);
+        }
+
+        // C52: by default a signed-in request sees only this person's own rows. The practice and
+        // personal context middleware narrow or replace this binding.
+        Isolation::bindUser($user->id);
+        try {
+            return $next($request);
+        } finally {
+            Isolation::clear();
+        }
     }
 }

@@ -7,6 +7,7 @@ use App\Models\TenantOffboarding;
 use App\Models\User;
 use App\Services\OffboardingService;
 use App\Services\PracticeExportBuilder;
+use App\Support\Isolation;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -28,6 +29,10 @@ class OffboardingExportController extends Controller
         abort_unless($offboarding->export_recipient_user_id === $user->id, 404);
         abort_unless($offboarding->exportAvailable(), 410, 'This export is no longer available.');
 
+        // The practice is closed, so nobody can bind it: the export reads through the platform connection.
+        if (Isolation::enabled()) {
+            Isolation::usePlatform();
+        }
         $path = $builder->build($offboarding, $user);
         $service->recordDownload($offboarding);
 
