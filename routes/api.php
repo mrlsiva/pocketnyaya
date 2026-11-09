@@ -9,6 +9,8 @@ use App\Http\Controllers\Api\V1\OdrController;
 use App\Http\Controllers\Api\V1\PingController;
 use App\Http\Controllers\Api\V1\PracticeController;
 use App\Http\Controllers\Api\V1\PublicController;
+use App\Http\Controllers\Api\V1\TeamController;
+use App\Http\Controllers\Api\V1\VerificationController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('ping', PingController::class)->name('api.v1.ping');
@@ -44,6 +46,12 @@ Route::middleware(['auth:sanctum', 'active', 'api.ability'])->group(function () 
         Route::delete('documents/{document}', [DocumentController::class, 'destroy']);
 
         Route::middleware('citizen.context')->group(function () {
+            Route::get('me/verification', [VerificationController::class, 'show']);
+            Route::post('me/verification/advocate', [VerificationController::class, 'submitAdvocate']);
+            Route::post('me/verification/mediator', [VerificationController::class, 'applyMediator']);
+            Route::post('me/verification/{verificationRequest}/documents', [VerificationController::class, 'uploadDocument']);
+            Route::put('me/directory-listing', [VerificationController::class, 'listing']);
+
             Route::get('consultations', [PublicController::class, 'consultations']);
             Route::post('consultations', [PublicController::class, 'requestConsultation'])->middleware('pn.can:consultations.request');
             Route::get('consultations/{consultation}', [PublicController::class, 'consultation_']);
@@ -86,6 +94,13 @@ Route::middleware(['auth:sanctum', 'active', 'api.ability'])->group(function () 
         });
 
         Route::middleware('tenant.context')->group(function () {
+            Route::middleware('pn.can:tenant.members.view')->group(function () {
+                Route::get('team', [TeamController::class, 'index']);
+                Route::post('team/invitations', [TeamController::class, 'invite']);
+                Route::delete('team/invitations/{invitation}', [TeamController::class, 'revokeInvitation']);
+                Route::put('team/{member}/role', [TeamController::class, 'assignRole']);
+                Route::delete('team/{member}', [TeamController::class, 'deactivate']);
+            });
             Route::middleware('pn.can:clients.view_all|clients.view_assigned')->group(function () {
                 Route::get('clients', [PracticeController::class, 'clients']);
                 Route::post('clients', [PracticeController::class, 'storeClient']);

@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\VerificationRequest;
 use App\Notifications\TenantInvitationNotification;
 use App\Services\ConsultationService;
+use App\Services\Documents\LocalKeyProvider;
 use App\Services\Documents\ShareService;
 use App\Services\RoleAssignmentService;
 use App\Services\TeamService;
@@ -20,8 +21,11 @@ use App\Services\VerificationService;
 use App\Support\AccessContext;
 use Database\Seeders\ReferenceDataSeeder;
 use Illuminate\Database\QueryException;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\Sanctum;
@@ -160,6 +164,62 @@ class PlatformFlowsTest extends PracticeTestCase
 
         $this->assertSame('verified', $profile->fresh()->verification_status);
         $this->assertTrue(AccessContext::citizenCan($applicant->fresh(), 'odr.mediate'));
+    }
+
+    public function test_api_verification_application_documents_and_listing(): void
+    {
+        Storage::fake('documents');
+        config(['pocketnyaya.document_key_dir' => storage_path('framework/testing/keys/'.uniqid())]);
+        app(LocalKeyProvider::class)->createVersion();
+        $applicant = $this->citizen();
+        Sanctum::actingAs($applicant, ['api:read', 'api:write']);
+
+        $this->postJson('/api/v1/me/verification/advocate')->assertStatus(422);
+        $profile = $this->advocateProfile($applicant);
+        Sanctum::actingAs($applicant = $applicant->fresh(), ['api:read', 'api:write']);
+        $this->postJson('/api/v1/me/verification/advocate')->assertCreated();
+        $request = VerificationRequest::query()->where('advocate_profile_id', $profile->id)->firstOrFail();
+        $this->postJson("/api/v1/me/verification/{$request->id}/documents", ['title' => 'Enrollment certificate', 'category' => 'verification', 'file' => UploadedFile::fake()->createWithContent('cert.pdf', '%PDF-1.4 synthetic')])->assertCreated();
+        $this->getJson('/api/v1/me/verification')->assertOk()->assertJsonPath('advocate.verification_status', 'pending')
+            ->assertJsonPath('requests.0.documents.0.title', 'Enrollment certificate');
+        $this->putJson('/api/v1/me/directory-listing', ['listed' => true])->assertForbidden();
+
+        Sanctum::actingAs($this->citizen(), ['api:read', 'api:write']);
+        $this->postJson("/api/v1/me/verification/{$request->id}/documents", ['title' => 'Not mine', 'category' => 'verification', 'file' => UploadedFile::fake()->createWithContent('x.pdf', '%PDF-1.4')])->assertNotFound();
+        $this->postJson('/api/v1/me/verification/mediator', ['accreditation_body' => 'Test Body', 'accreditation_number' => 'API-1', 'categories' => ['ecommerce']])->assertCreated();
+        $this->postJson('/api/v1/me/verification/mediator', ['accreditation_body' => 'Test Body', 'accreditation_number' => 'API-2'])->assertStatus(422);
+        File::deleteDirectory((string) config('pocketnyaya.document_key_dir'));
+    }
+
+    public function test_api_team_management_follows_the_role_rules(): void
+    {
+        Notification::fake();
+        $firm = $this->firm();
+        $partner = $this->member($firm, 'Managing Partner');
+        $junior = $this->member($firm, 'Junior Associate');
+        $this->advocateProfile($junior);
+        $headers = ['X-Tenant-ID' => $firm];
+
+        Sanctum::actingAs($partner, ['api:read', 'api:write']);
+        $this->getJson('/api/v1/team', $headers)->assertOk()->assertJsonCount(2, 'members')->assertJsonFragment(['Managing Partner']);
+        $this->postJson('/api/v1/team/invitations', ['email' => 'new.person@example.test', 'role' => 'Clerk / Office Staff'], $headers)->assertCreated();
+        Notification::assertSentOnDemand(TenantInvitationNotification::class);
+        $invitation = (string) DB::table('tenant_invitations')->where('tenant_id', $firm)->value('id');
+        $this->deleteJson("/api/v1/team/invitations/{$invitation}", [], $headers)->assertNoContent();
+        $this->deleteJson("/api/v1/team/invitations/{$invitation}", [], $headers)->assertNotFound();
+        $this->putJson("/api/v1/team/{$junior->id}/role", ['role' => 'Senior Associate'], $headers)->assertOk();
+        $this->putJson('/api/v1/team/'.User::factory()->create()->id.'/role', ['role' => 'Senior Associate'], $headers)->assertNotFound();
+
+        Sanctum::actingAs($junior, ['api:read', 'api:write']);
+        $this->postJson('/api/v1/team/invitations', ['email' => 'x@example.test', 'role' => 'Clerk / Office Staff'], $headers)->assertForbidden();
+
+        $other = $this->firm();
+        Sanctum::actingAs($this->member($other, 'Managing Partner'), ['api:read', 'api:write']);
+        $this->deleteJson("/api/v1/team/{$junior->id}", [], ['X-Tenant-ID' => $other])->assertNotFound();
+
+        Sanctum::actingAs($partner, ['api:read', 'api:write']);
+        $this->deleteJson("/api/v1/team/{$junior->id}", [], $headers)->assertNoContent();
+        $this->assertFalse(AccessContext::isActiveMember($junior, $firm));
     }
 
     public function test_enrollment_number_locks_after_verification_and_bio_returns_to_screening(): void
