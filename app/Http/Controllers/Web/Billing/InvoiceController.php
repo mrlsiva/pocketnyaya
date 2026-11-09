@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Web\Billing;
 
 use App\Http\Controllers\Controller;
+use App\Integrations\Contracts\PaymentGateway;
 use App\Models\Client;
 use App\Models\FeeArrangement;
 use App\Models\FeeScheduleItem;
@@ -169,6 +170,18 @@ class InvoiceController extends Controller
         $invoices->addRetainer($invoice, $arrangement, $data['period']);
 
         return back()->with('status', 'Retainer added.');
+    }
+
+    /** Step 24. Refused with a plain message until a payment gateway is approved and set up. */
+    public function paymentLink(Request $request, Invoice $invoice, PaymentGateway $gateway): RedirectResponse
+    {
+        $user = $this->user($request);
+        abort_unless(BillingAccess::canViewInvoice($user, $invoice), 404);
+        abort_unless(AccessContext::tenantCan($user, 'billing.payments.record'), 403);
+        abort_unless($invoice->invoice_type !== 'credit_note' && in_array($invoice->status, ['issued', 'partially_paid'], true), 422, 'Only an issued invoice with a balance can have a payment link.');
+        $link = $gateway->createPaymentLink($invoice);
+
+        return back()->with('status', 'Payment link: '.$link['url']);
     }
 
     /** A credit note against this invoice. Provisional treatment, pending a CA's review. */

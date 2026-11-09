@@ -30,6 +30,7 @@ use App\Http\Controllers\Web\PrivacyController;
 use App\Http\Controllers\Web\ProfileController;
 use App\Http\Controllers\Web\Staff\AdminController;
 use App\Http\Controllers\Web\Staff\ComplianceController;
+use App\Http\Controllers\Web\Staff\IntegrationController;
 use App\Http\Controllers\Web\Staff\ModerationController;
 use App\Http\Controllers\Web\Staff\OdrIntakeController;
 use App\Http\Controllers\Web\Staff\OffboardingController;
@@ -154,6 +155,7 @@ Route::middleware(['auth', 'active'])->group(function () {
             Route::post('odr/{dispute}/offers/{offer}', [OdrController::class, 'respondOffer'])->name('odr.offers.respond');
             Route::post('odr/{dispute}/sessions', [OdrController::class, 'schedule'])->name('odr.sessions.store');
             Route::put('odr/{dispute}/sessions/{session}', [OdrController::class, 'updateSession'])->name('odr.sessions.update');
+            Route::post('odr/{dispute}/sessions/{session}/meeting', [OdrController::class, 'meeting'])->name('odr.sessions.meeting');
             Route::post('odr/{dispute}/settlements', [OdrController::class, 'generate'])->name('odr.settlements.store');
             Route::post('odr/{dispute}/settlements/{settlement}/void', [OdrController::class, 'voidSettlement'])->name('odr.settlements.void');
             Route::post('odr/{dispute}/settlements/{settlement}/respond', [OdrController::class, 'respondSettlement'])->name('odr.settlements.respond');
@@ -211,6 +213,7 @@ Route::middleware(['auth', 'active'])->group(function () {
                 Route::post('invoices/{invoice}/retainers', [InvoiceController::class, 'addRetainer'])->name('invoices.retainers.store');
                 Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'pdf'])->name('invoices.pdf');
                 Route::post('invoices/{invoice}/credit-notes', [InvoiceController::class, 'creditNote'])->name('invoices.credit');
+                Route::post('invoices/{invoice}/payment-link', [InvoiceController::class, 'paymentLink'])->name('invoices.payment_link');
                 Route::post('invoices/{invoice}/issue', [InvoiceController::class, 'issue'])->name('invoices.issue');
                 Route::post('invoices/{invoice}/cancel', [InvoiceController::class, 'cancel'])->name('invoices.cancel');
                 Route::post('invoices/{invoice}/payments', [InvoiceController::class, 'recordPayment'])->name('invoices.payments.store');
@@ -313,6 +316,8 @@ Route::middleware(['auth', 'active'])->group(function () {
                 Route::get('users', [AdminController::class, 'users'])->middleware('pn.can:platform.users.view_metadata')->name('users');
                 Route::put('users/{person}', [AdminController::class, 'updateUser'])->middleware('pn.can:platform.users.suspend')->name('users.update');
                 Route::middleware('pn.can:platform.settings.manage')->group(function () {
+                    Route::get('integrations', [IntegrationController::class, 'index'])->name('integrations');
+                    Route::post('integrations/mask-preview', [IntegrationController::class, 'index'])->name('integrations.mask');
                     Route::get('settings', [AdminController::class, 'settings'])->name('settings');
                     Route::put('settings', [AdminController::class, 'updateSetting'])->name('settings.update');
                 });

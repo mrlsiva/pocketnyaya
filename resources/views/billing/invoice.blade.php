@@ -180,6 +180,10 @@
 
             @if ($canPay)
                 <div class="card shadow-sm mb-3 d-print-none"><div class="card-body">
+                    <form class="mb-3" method="post" action="{{ route('practice.invoices.payment_link', $invoice) }}">@csrf
+                        <button class="btn btn-outline-primary btn-sm" type="submit">Create payment link</button>
+                        <div class="form-text">Needs a payment gateway to be set up first.</div>
+                    </form>
                     <h2 class="h6">Record a payment</h2>
                     <form method="post" action="{{ route('practice.invoices.payments.store', $invoice) }}">@csrf
                         <input class="form-control form-control-sm mb-2" name="amount" placeholder="Amount" required aria-label="Amount">

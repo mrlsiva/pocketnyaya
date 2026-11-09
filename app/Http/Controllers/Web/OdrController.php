@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Documents\UploadDocumentRequest;
+use App\Integrations\Contracts\VideoProvider;
 use App\Models\Disclaimer;
 use App\Models\Document;
 use App\Models\OdrDispute;
@@ -238,6 +239,16 @@ class OdrController extends Controller
         $session->forceFill($data)->save();
 
         return back()->with('status', 'Session updated.');
+    }
+
+    /** Step 23. Refused with a plain message until a video provider is approved and set up. */
+    public function meeting(Request $request, OdrDispute $dispute, OdrSession $session, VideoProvider $video): RedirectResponse
+    {
+        $this->mediatorOnly($request, $dispute, 'odr.sessions.manage');
+        abort_unless($session->dispute_id === $dispute->id && $session->status === 'scheduled', 404);
+        $session->forceFill(['meeting_ref' => $video->createMeeting($session)])->save();
+
+        return back()->with('status', 'Meeting link created.');
     }
 
     public function generate(Request $request, OdrDispute $dispute): RedirectResponse

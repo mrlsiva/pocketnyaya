@@ -152,7 +152,13 @@
                 <h2 class="h6">Sessions</h2>
                 @forelse ($sessions as $session)
                     <div class="small py-1 border-bottom">{{ $session->scheduled_at->format('d M Y H:i') }} · {{ str_replace('_', ' ', $session->mode) }} · {{ $session->duration_minutes }} min · {{ str_replace('_', ' ', $session->status) }}
+                        @if ($session->meeting_ref)<div>Meeting: {{ $session->meeting_ref }}</div>@endif
                         @if ($isMediator && $session->status === 'scheduled')
+                            @unless ($session->meeting_ref)
+                                <form class="mt-1" method="post" action="{{ route('citizen.odr.sessions.meeting', [$dispute, $session]) }}">@csrf
+                                    <button class="btn btn-outline-primary btn-sm" type="submit">Create meeting link</button>
+                                </form>
+                            @endunless
                             <form class="mt-1 d-flex gap-1" method="post" action="{{ route('citizen.odr.sessions.update', [$dispute, $session]) }}">@csrf @method('put')
                                 <button class="btn btn-outline-secondary btn-sm" name="status" value="held" type="submit">Held</button>
                                 <button class="btn btn-outline-secondary btn-sm" name="status" value="cancelled" type="submit">Cancel</button>
@@ -161,7 +167,7 @@
                         @endif
                     </div>
                 @empty
-                    <p class="small text-body-secondary mb-0">None scheduled. Video calls aren't available yet, so please arrange the link separately.</p>
+                    <p class="small text-body-secondary mb-0">None scheduled. Until a video provider is set up, please arrange the meeting link separately.</p>
                 @endforelse
                 @if ($isMediator && $open)
                     <form class="mt-2" method="post" action="{{ route('citizen.odr.sessions.store', $dispute) }}">@csrf

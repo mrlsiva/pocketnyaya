@@ -6,6 +6,7 @@ use App\Http\Middleware\RequirePermission;
 use App\Http\Middleware\SetCitizenContext;
 use App\Http\Middleware\SetStaffContext;
 use App\Http\Middleware\SetTenantContext;
+use App\Integrations\IntegrationNotConfigured;
 use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -50,4 +51,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson()
         );
+
+        // A switched-off outside service: a plain message, never a server error.
+        $exceptions->render(function (IntegrationNotConfigured $e, Request $request) {
+            return $request->is('api/*') || $request->expectsJson()
+                ? response()->json(['message' => $e->getMessage(), 'integration' => $e->integration], 503)
+                : back()->withErrors(['integration' => $e->getMessage()]);
+        });
     })->create();

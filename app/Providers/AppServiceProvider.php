@@ -2,6 +2,14 @@
 
 namespace App\Providers;
 
+use App\Integrations\Contracts\AiDrafting;
+use App\Integrations\Contracts\CourtDataProvider;
+use App\Integrations\Contracts\ESignProvider;
+use App\Integrations\Contracts\MessageSender;
+use App\Integrations\Contracts\PaymentGateway;
+use App\Integrations\Contracts\VideoProvider;
+use App\Integrations\Drivers\NotConfiguredDriver;
+use App\Integrations\IntegrationRegistry;
 use App\Models\User;
 use App\Services\Documents\KeyProvider;
 use App\Services\Documents\LocalKeyProvider;
@@ -21,6 +29,20 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(KeyProvider::class, LocalKeyProvider::class);
+
+        // Phase 4 outside services. Each stays on the switched-off driver until a real one is
+        // written, approved and selected in .env (IntegrationRegistry::IMPLEMENTED lists those).
+        foreach ([
+            PaymentGateway::class => 'payments', VideoProvider::class => 'video', ESignProvider::class => 'esign',
+            CourtDataProvider::class => 'court_data', AiDrafting::class => 'ai', MessageSender::class => 'messaging',
+        ] as $contract => $key) {
+            $this->app->bind($contract, function () use ($key) {
+                $driver = (string) config("integrations.{$key}.driver", 'none');
+                $class = IntegrationRegistry::IMPLEMENTED[$key][$driver] ?? null;
+
+                return $class !== null ? $this->app->make($class) : new NotConfiguredDriver(IntegrationRegistry::SERVICES[$key][0]);
+            });
+        }
     }
 
     /**

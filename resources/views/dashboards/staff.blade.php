@@ -32,6 +32,7 @@
             ['platform.tenants.close', 'Practice closures', 'Close a practice in stages, with export and retention. Nothing is deleted.', 'staff.admin.offboarding.index'],
             ['platform.superadmin.propose', 'Platform staff', 'Super Admins and Compliance Officers. New Super Admins need a second approval.', 'staff.admin.team'],
             ['platform.settings.manage', 'Platform settings', 'Non-secret settings for the platform.', 'staff.admin.settings'],
+            ['platform.settings.manage', 'Integrations', 'Outside services (all switched off) and the personal-data masker.', 'staff.admin.integrations'],
             ['platform.subscription_plans.manage', 'Subscription plans', 'Plans offered to practices.', 'staff.admin.plans'],
             ['platform.reference_data.manage', 'Reference data', 'Practice areas, languages, cities and courts.', 'staff.admin.reference'],
             ['moderation.queue.view', 'Moderation', 'Review flagged posts and reports. Authors are never shown.', 'staff.moderation.index'],
