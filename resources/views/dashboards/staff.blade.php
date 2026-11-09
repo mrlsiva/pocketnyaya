@@ -29,6 +29,7 @@
         @foreach ([
             ['platform.tenants.view_metadata', 'Practices', 'See practices and suspend them if needed.', 'staff.admin.tenants'],
             ['platform.users.view_metadata', 'Accounts', 'See accounts and suspend them if needed.', 'staff.admin.users'],
+            ['platform.superadmin.propose', 'Platform staff', 'Super Admins and Compliance Officers. New Super Admins need a second approval.', 'staff.admin.team'],
             ['platform.settings.manage', 'Platform settings', 'Non-secret settings for the platform.', 'staff.admin.settings'],
             ['platform.subscription_plans.manage', 'Subscription plans', 'Plans offered to practices.', 'staff.admin.plans'],
             ['platform.reference_data.manage', 'Reference data', 'Practice areas, languages, cities and courts.', 'staff.admin.reference'],

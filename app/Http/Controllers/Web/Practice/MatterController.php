@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Practice\MatterRequest;
 use App\Models\Client;
 use App\Models\Document;
+use App\Models\LegalHold;
 use App\Models\Matter;
 use App\Models\MatterNote;
 use App\Models\MatterTask;
@@ -104,6 +105,7 @@ class MatterController extends Controller
     public function destroy(Matter $matter): RedirectResponse
     {
         Gate::authorize('delete', $matter);
+        abort_if(LegalHold::coversMatter($matter), 422, 'A legal hold covers this matter, so it cannot be removed.');
         $matter->delete();
 
         return redirect()->route('practice.matters.index')->with('status', 'Matter removed.');

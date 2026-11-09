@@ -8,6 +8,7 @@
         <div class="d-flex flex-wrap gap-2">
             @if ($invoice->status !== 'draft' && ! $redacted)
                 <button class="btn btn-outline-secondary btn-sm" type="button" onclick="window.print()">Print</button>
+                <a class="btn btn-outline-secondary btn-sm" href="{{ route('practice.invoices.pdf', $invoice) }}">Download PDF</a>
             @endif
             @if ($canIssue)
                 <form method="post" action="{{ route('practice.invoices.issue', $invoice) }}">@csrf<button class="btn btn-primary btn-sm" type="submit">Issue invoice</button></form>
@@ -85,6 +86,66 @@
                         <div class="col-md-3"><button class="btn btn-primary btn-sm" type="submit">Add line</button></div>
                     </form>
                 </div></div>
+
+                @if ($unbilledTime->isNotEmpty())
+                    <div class="card shadow-sm mt-3 d-print-none"><div class="card-body">
+                        <h2 class="h6">Add approved time</h2>
+                        <form method="post" action="{{ route('practice.invoices.time.store', $invoice) }}">@csrf
+                            @foreach ($unbilledTime as $entry)
+                                <div class="form-check small">
+                                    <input class="form-check-input" type="checkbox" name="entries[]" value="{{ $entry->id }}" id="t{{ $entry->id }}" checked>
+                                    <label class="form-check-label" for="t{{ $entry->id }}">{{ $entry->work_date->format('d M Y') }} · {{ intdiv($entry->minutes, 60) }}h {{ $entry->minutes % 60 }}m · {{ $entry->description }} <span class="text-body-secondary">({{ $entry->membership?->user?->name }})</span></label>
+                                </div>
+                            @endforeach
+                            <div class="row g-2 mt-1">
+                                <div class="col-md-4"><input class="form-control form-control-sm" name="hourly_rate" value="{{ $defaultRate }}" placeholder="Hourly rate" required aria-label="Hourly rate"></div>
+                                <div class="col-md-4"><button class="btn btn-outline-primary btn-sm" type="submit">Add selected time</button></div>
+                            </div>
+                        </form>
+                    </div></div>
+                @endif
+
+                @if ($unbilledExpenses->isNotEmpty())
+                    <div class="card shadow-sm mt-3 d-print-none"><div class="card-body">
+                        <h2 class="h6">Add reimbursable expenses</h2>
+                        <form method="post" action="{{ route('practice.invoices.expenses.store', $invoice) }}">@csrf
+                            @foreach ($unbilledExpenses as $expense)
+                                <div class="form-check small">
+                                    <input class="form-check-input" type="checkbox" name="expenses[]" value="{{ $expense->id }}" id="e{{ $expense->id }}" @disabled($expense->is_pure_agent) @checked(! $expense->is_pure_agent)>
+                                    <label class="form-check-label" for="e{{ $expense->id }}">{{ $expense->expense_date->format('d M Y') }} · {{ $expense->category }} · {{ $money::format($expense->amount) }}
+                                        @if ($expense->is_pure_agent)<span class="text-body-secondary">(pure agent: needs an approved tax rule first)</span>@endif</label>
+                                </div>
+                            @endforeach
+                            <button class="btn btn-outline-primary btn-sm mt-2" type="submit">Add selected expenses</button>
+                        </form>
+                    </div></div>
+                @endif
+
+                @if ($scheduleItems->isNotEmpty())
+                    <div class="card shadow-sm mt-3 d-print-none"><div class="card-body">
+                        <h2 class="h6">Add a scheduled fee</h2>
+                        <form class="row g-2" method="post" action="{{ route('practice.invoices.schedule.store', $invoice) }}">@csrf
+                            <div class="col-md-7"><select class="form-select form-select-sm" name="fee_schedule_item_id" aria-label="Fee">
+                                @foreach ($scheduleItems as $item)<option value="{{ $item->id }}">{{ $item->description }} · {{ $money::format($item->amount) }}</option>@endforeach
+                            </select></div>
+                            <div class="col-md-2"><input class="form-control form-control-sm" name="quantity" value="1" aria-label="Quantity"></div>
+                            <div class="col-md-3"><button class="btn btn-outline-primary btn-sm" type="submit">Add fee</button></div>
+                        </form>
+                    </div></div>
+                @endif
+
+                @if ($retainers->isNotEmpty())
+                    <div class="card shadow-sm mt-3 d-print-none"><div class="card-body">
+                        <h2 class="h6">Add a retainer period</h2>
+                        <form class="row g-2" method="post" action="{{ route('practice.invoices.retainers.store', $invoice) }}">@csrf
+                            <div class="col-md-6"><select class="form-select form-select-sm" name="fee_arrangement_id" aria-label="Retainer">
+                                @foreach ($retainers as $retainer)<option value="{{ $retainer->id }}">{{ $retainer->plan?->name ?? 'Retainer' }} · {{ $money::format($retainer->retainer_amount ?? $retainer->plan?->monthly_fee) }}</option>@endforeach
+                            </select></div>
+                            <div class="col-md-3"><input class="form-control form-control-sm" name="period" value="{{ now()->format('F Y') }}" required aria-label="Period"></div>
+                            <div class="col-md-3"><button class="btn btn-outline-primary btn-sm" type="submit">Add retainer</button></div>
+                        </form>
+                    </div></div>
+                @endif
             @endif
         </div>
 

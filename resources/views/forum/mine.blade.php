@@ -7,7 +7,10 @@
         @forelse ($questions as $question)
             <div class="list-group-item d-flex flex-wrap justify-content-between gap-2">
                 @if ($question->status === 'published')<a href="{{ route('forum.show', $question) }}">{{ $question->title }}</a>@else<span>{{ $question->title }}</span>@endif
-                <span class="badge text-bg-light text-capitalize">{{ str_replace('_', ' ', $question->status) }}</span>
+                <span>
+                    @if (in_array($question->status, ['pending_screening', 'flagged'], true))<a class="small me-2" href="{{ route('citizen.forum.edit', $question) }}">Edit</a>@endif
+                    <span class="badge text-bg-light text-capitalize">{{ str_replace('_', ' ', $question->status) }}</span>
+                </span>
             </div>
         @empty
             <div class="list-group-item text-body-secondary">You haven't asked anything yet.</div>

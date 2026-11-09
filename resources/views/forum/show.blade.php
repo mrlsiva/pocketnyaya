@@ -23,6 +23,14 @@
             <div class="card shadow-sm mb-2"><div class="card-body">
                 <p style="white-space: pre-line">{{ $answer->body }}</p>
                 <div class="small text-body-secondary">Adv. {{ $answer->advocate?->user?->name }} · {{ $answer->published_at?->format('d M Y') }}</div>
+                @if ($canAnswer && $answer->author_user_id === $user->id && \App\Support\AccessContext::citizenCan($user, 'forum.answers.update_own'))
+                    <details class="mt-2"><summary class="small">Edit my answer</summary>
+                        <form class="mt-2" method="post" action="{{ route('citizen.forum.answers.update', $answer) }}">@csrf @method('put')
+                            <textarea class="form-control form-control-sm mb-2" name="body" rows="5" required aria-label="Edit your answer">{{ $answer->body }}</textarea>
+                            <button class="btn btn-outline-primary btn-sm" type="submit">Save changes</button>
+                        </form>
+                    </details>
+                @endif
                 @include('forum.post-actions', ['type' => 'forum_answer', 'id' => $answer->id, 'canComment' => $canComment, 'canReport' => $canReport, 'reasons' => $reasons, 'postComments' => $comments[$answer->id] ?? collect()])
             </div></div>
         @empty

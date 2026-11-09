@@ -28,6 +28,7 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\Sanctum;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Tests\Feature\Practice\PracticeTestCase;
 
@@ -420,6 +421,66 @@ class OdrTest extends PracticeTestCase
 
         $this->actingAs($mediator);
         $this->post("/citizen/odr/{$dispute->id}/settlements/{$settlement->id}/void")->assertSessionHasErrors('status');
+    }
+
+    public function test_mobile_api_covers_invitation_evidence_caucus_and_mediator_tools(): void
+    {
+        $claimant = $this->citizen();
+        $respondent = $this->citizen();
+        $dispute = $this->dispute($claimant);
+        $this->invite($dispute, $respondent);
+
+        Sanctum::actingAs($this->citizen(), ['api:read', 'api:write']);
+        $this->postJson("/api/v1/odr/invitations/{$this->token}/accept")->assertForbidden();
+        Sanctum::actingAs($respondent, ['api:read', 'api:write']);
+        $this->postJson('/api/v1/odr/invitations/not-a-real-token/accept')->assertNotFound();
+        $this->postJson("/api/v1/odr/invitations/{$this->token}/accept")->assertOk()->assertJsonPath('id', $dispute->id);
+        $this->postJson("/api/v1/odr/disputes/{$dispute->id}/evidence", ['title' => 'Receipt', 'file' => UploadedFile::fake()->createWithContent('r.pdf', '%PDF-1.4 synthetic')])
+            ->assertCreated()->assertJsonStructure(['id', 'document_id']);
+
+        $mediator = $this->mediator($dispute->fresh());
+        $claimantPart = OdrAccess::participant($claimant, $dispute);
+        Sanctum::actingAs($mediator, ['api:read', 'api:write']);
+        $this->getJson('/api/v1/odr/disputes')->assertOk()->assertJsonPath('data.0.id', $dispute->id);
+        $this->getJson("/api/v1/odr/disputes/{$dispute->id}")->assertOk()->assertJsonPath('is_mediator', true);
+        $this->postJson("/api/v1/odr/disputes/{$dispute->id}/messages", ['body' => 'Private question via API', 'private_with' => $claimantPart->id])->assertCreated();
+        $this->postJson("/api/v1/odr/disputes/{$dispute->id}/sessions", ['scheduled_at' => now()->addDay()->format('Y-m-d H:i:s'), 'duration_minutes' => 45, 'mode' => 'audio'])->assertCreated();
+        $settlement = $this->postJson("/api/v1/odr/disputes/{$dispute->id}/settlements", ['template_id' => $this->template()->id, 'terms' => 'Respondent pays 2000 by 1 March.'])
+            ->assertCreated()->assertJsonPath('label', 'Settlement agreement (unsigned)')->json('id');
+
+        Sanctum::actingAs($respondent, ['api:read', 'api:write']);
+        $this->getJson("/api/v1/odr/disputes/{$dispute->id}")->assertOk()->assertDontSee('Private question via API');
+        $this->postJson("/api/v1/odr/disputes/{$dispute->id}/messages", ['body' => 'No caucus opened for me', 'caucus' => true])->assertForbidden();
+        $this->postJson("/api/v1/odr/disputes/{$dispute->id}/settlements", ['template_id' => $this->template()->id, 'terms' => 'X'])->assertNotFound();
+        $this->postJson("/api/v1/odr/disputes/{$dispute->id}/close", ['closure_reason' => 'X'])->assertNotFound();
+
+        Sanctum::actingAs($claimant, ['api:read', 'api:write']);
+        $this->getJson("/api/v1/odr/disputes/{$dispute->id}")->assertOk()->assertSee('Private question via API');
+        $this->postJson("/api/v1/odr/disputes/{$dispute->id}/messages", ['body' => 'Private answer via API', 'caucus' => true])->assertCreated();
+
+        Sanctum::actingAs($mediator, ['api:read', 'api:write']);
+        $this->postJson("/api/v1/odr/disputes/{$dispute->id}/settlements/{$settlement}/void")->assertOk()->assertJsonPath('status', 'void');
+        $this->postJson("/api/v1/odr/disputes/{$dispute->id}/close", ['closure_reason' => 'No agreement'])->assertOk()->assertJsonPath('status', 'closed_no_settlement');
+    }
+
+    public function test_mobile_api_lets_a_proposed_mediator_answer_with_a_disclosure(): void
+    {
+        [$dispute] = $this->negotiation();
+        $user = $this->citizen();
+        app(RoleAssignmentService::class)->assign($user, 'Mediator', (string) AccessContext::platformTenantId());
+        $profile = MediatorProfile::factory()->create(['user_id' => $user->id]);
+        $profile->forceFill(['verification_status' => 'verified', 'is_available' => true])->save();
+        app(OdrService::class)->proposeMediator($dispute, $profile, User::factory()->create());
+        $assignment = OdrMediatorAssignment::query()->where('dispute_id', $dispute->id)->firstOrFail();
+
+        Sanctum::actingAs($this->citizen(), ['api:read', 'api:write']);
+        $this->getJson('/api/v1/odr/assignments')->assertForbidden();
+        $this->postJson("/api/v1/odr/assignments/{$assignment->id}", ['decision' => 'accept', 'conflict_disclosure' => 'None'])->assertNotFound();
+
+        Sanctum::actingAs($user, ['api:read', 'api:write']);
+        $this->getJson('/api/v1/odr/assignments')->assertOk()->assertJsonPath('data.0.id', $assignment->id);
+        $this->postJson("/api/v1/odr/assignments/{$assignment->id}", ['decision' => 'accept'])->assertUnprocessable();
+        $this->postJson("/api/v1/odr/assignments/{$assignment->id}", ['decision' => 'accept', 'conflict_disclosure' => 'No conflicts'])->assertOk()->assertJsonPath('status', 'accepted');
     }
 
     public function test_declining_voids_the_terms_and_a_new_version_replaces_the_old(): void

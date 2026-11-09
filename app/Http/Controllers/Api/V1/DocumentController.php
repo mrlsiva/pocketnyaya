@@ -66,7 +66,7 @@ class DocumentController extends Controller
     public function destroy(Request $request, Document $document, DocumentVault $vault): JsonResponse
     {
         Gate::authorize('delete', $document);
-        abort_if(LegalHold::isActive('document', $document->id), 422, 'A legal hold covers this document.');
+        abort_if(LegalHold::coversDocument($document), 422, 'A legal hold covers this document.');
         $vault->log($document, 'delete', $this->user($request));
         $document->delete();
 

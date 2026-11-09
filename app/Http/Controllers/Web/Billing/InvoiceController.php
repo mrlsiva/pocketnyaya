@@ -4,17 +4,23 @@ namespace App\Http\Controllers\Web\Billing;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Models\FeeArrangement;
+use App\Models\FeeScheduleItem;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Matter;
+use App\Models\MatterExpense;
 use App\Models\Payment;
+use App\Models\TimeEntry;
 use App\Models\User;
+use App\Services\AuditLogWriter;
 use App\Services\Billing\InvoiceService;
 use App\Support\AccessContext;
 use App\Support\BillingAccess;
 use App\Support\Money;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -63,10 +69,12 @@ class InvoiceController extends Controller
         abort_unless(BillingAccess::canViewInvoice($user, $invoice), 404);
         $redacted = BillingAccess::isRedacted($user, $invoice);
 
-        return view('billing.invoice', [
+        $canEdit = BillingAccess::canEditInvoice($user, $invoice) && $invoice->status === 'draft' && AccessContext::tenantCan($user, 'billing.invoices.create_draft');
+
+        return view('billing.invoice', $this->billableSources($invoice, $canEdit) + [
             'invoice' => $invoice->load(['client', 'matter', 'lines']),
             'redacted' => $redacted,
-            'canEdit' => BillingAccess::canEditInvoice($user, $invoice) && $invoice->status === 'draft' && AccessContext::tenantCan($user, 'billing.invoices.create_draft'),
+            'canEdit' => $canEdit,
             'canIssue' => BillingAccess::canEditInvoice($user, $invoice) && $invoice->status === 'draft' && AccessContext::tenantCan($user, 'billing.invoices.issue'),
             'canCancel' => BillingAccess::canEditInvoice($user, $invoice) && in_array($invoice->status, ['issued', 'partially_paid'], true) && AccessContext::tenantCan($user, 'billing.invoices.cancel'),
             'canPay' => in_array($invoice->status, ['issued', 'partially_paid'], true) && AccessContext::tenantCan($user, 'billing.payments.record'),
@@ -100,13 +108,79 @@ class InvoiceController extends Controller
         return back()->with('status', 'Line removed.');
     }
 
-    public function destroy(Request $request, Invoice $invoice): RedirectResponse
+    public function destroy(Request $request, Invoice $invoice, InvoiceService $invoices): RedirectResponse
     {
         $this->authorizeDraftEdit($request, $invoice);
         abort_unless($invoice->status === 'draft', 422);
-        $invoice->delete();
+        $invoices->deleteDraft($invoice);
 
         return redirect()->route('practice.invoices.index')->with('status', 'Draft removed.');
+    }
+
+    public function addTime(Request $request, Invoice $invoice, InvoiceService $invoices): RedirectResponse
+    {
+        $this->authorizeDraftEdit($request, $invoice);
+        $data = $request->validate([
+            'entries' => ['required', 'array', 'min:1', 'max:200'],
+            'entries.*' => ['uuid'],
+            'hourly_rate' => ['required', 'numeric', 'min:0', 'max:99999999', 'decimal:0,2'],
+        ]);
+        $count = $invoices->addTimeEntries($invoice, array_values($data['entries']), (string) $data['hourly_rate']);
+
+        return back()->with('status', "{$count} time ".($count === 1 ? 'entry' : 'entries').' added.');
+    }
+
+    public function addExpenses(Request $request, Invoice $invoice, InvoiceService $invoices): RedirectResponse
+    {
+        $this->authorizeDraftEdit($request, $invoice);
+        $data = $request->validate(['expenses' => ['required', 'array', 'min:1', 'max:200'], 'expenses.*' => ['uuid']]);
+        $count = $invoices->addExpenses($invoice, array_values($data['expenses']));
+
+        return back()->with('status', "{$count} ".($count === 1 ? 'expense' : 'expenses').' added.');
+    }
+
+    public function addScheduleItem(Request $request, Invoice $invoice, InvoiceService $invoices): RedirectResponse
+    {
+        $this->authorizeDraftEdit($request, $invoice);
+        $data = $request->validate([
+            'fee_schedule_item_id' => ['required', 'uuid'],
+            'quantity' => ['required', 'numeric', 'gt:0', 'max:9999', 'decimal:0,2'],
+        ]);
+        $item = FeeScheduleItem::query()->where(['id' => $data['fee_schedule_item_id'], 'tenant_id' => $invoice->tenant_id])->first();
+        abort_if($item === null, 422, 'That fee is not available.');
+        $invoices->addScheduleItem($invoice, $item, (string) $data['quantity']);
+
+        return back()->with('status', 'Fee added.');
+    }
+
+    public function addRetainer(Request $request, Invoice $invoice, InvoiceService $invoices): RedirectResponse
+    {
+        $this->authorizeDraftEdit($request, $invoice);
+        $data = $request->validate([
+            'fee_arrangement_id' => ['required', 'uuid'],
+            'period' => ['required', 'string', 'max:40'],
+        ]);
+        $arrangement = FeeArrangement::query()->where(['id' => $data['fee_arrangement_id'], 'tenant_id' => $invoice->tenant_id])->first();
+        abort_if($arrangement === null, 422, 'That retainer is not available.');
+        $invoices->addRetainer($invoice, $arrangement, $data['period']);
+
+        return back()->with('status', 'Retainer added.');
+    }
+
+    /** Private download only. Drafts have no number, and redacted viewers get no copy. */
+    public function pdf(Request $request, Invoice $invoice, InvoiceService $invoices): Response
+    {
+        $user = $this->user($request);
+        abort_unless(BillingAccess::canViewInvoice($user, $invoice), 404);
+        abort_if($invoice->status === 'draft', 422, 'Issue the invoice first.');
+        abort_if(BillingAccess::isRedacted($user, $invoice), 403);
+        app(AuditLogWriter::class)->record('billing.invoice_downloaded', 'invoice', $invoice->id, $invoice->tenant_id);
+
+        return response($invoices->pdf($invoice->load('lines')), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.str_replace('/', '-', (string) $invoice->invoice_number).'.pdf"',
+            'Cache-Control' => 'private, no-store',
+        ]);
     }
 
     public function issue(Request $request, Invoice $invoice, InvoiceService $invoices): RedirectResponse
@@ -182,6 +256,34 @@ class InvoiceController extends Controller
         $user = $request->user();
 
         return $user;
+    }
+
+    /**
+     * Work that can still be billed to this invoice's client, and matter if it has one.
+     *
+     * @return array<string, mixed>
+     */
+    private function billableSources(Invoice $invoice, bool $canEdit): array
+    {
+        if (! $canEdit) {
+            return ['unbilledTime' => collect(), 'unbilledExpenses' => collect(), 'scheduleItems' => collect(), 'retainers' => collect(), 'defaultRate' => null];
+        }
+
+        $matters = Matter::query()->where(['tenant_id' => $invoice->tenant_id, 'client_id' => $invoice->client_id])
+            ->when($invoice->matter_id !== null, fn ($q) => $q->whereKey($invoice->matter_id))->pluck('id');
+        $arrangements = FeeArrangement::query()->with(['plan', 'scheduleItems'])->where(['tenant_id' => $invoice->tenant_id, 'client_id' => $invoice->client_id])
+            ->where('status', '<>', 'ended')->get();
+        $hourly = $arrangements->where('arrangement_type', 'hourly')->sortByDesc(fn (FeeArrangement $a) => $a->matter_id === $invoice->matter_id && $a->matter_id !== null)->first();
+
+        return [
+            'unbilledTime' => TimeEntry::query()->with('membership.user:id,name')->whereIn('matter_id', $matters)
+                ->where(['status' => 'approved', 'is_billable' => true])->whereNull('invoice_line_id')->orderBy('work_date')->limit(200)->get(),
+            'unbilledExpenses' => MatterExpense::query()->whereIn('matter_id', $matters)
+                ->where(['is_reimbursable' => true])->whereNull('invoice_line_id')->orderBy('expense_date')->limit(200)->get(),
+            'scheduleItems' => $arrangements->flatMap(fn (FeeArrangement $a) => $a->scheduleItems),
+            'retainers' => $arrangements->filter(fn (FeeArrangement $a) => $a->isRetainer() && ($a->retainer_amount !== null || $a->plan !== null)),
+            'defaultRate' => $hourly?->hourly_rate,
+        ];
     }
 
     private function authorizeDraftEdit(Request $request, Invoice $invoice): void

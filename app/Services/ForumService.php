@@ -35,6 +35,49 @@ class ForumService
         });
     }
 
+    /**
+     * D8.11 updateOwn: the author may edit a question only while it waits for review.
+     * The edit is screened again, and any open review case for the old text is closed as edited.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public function editQuestion(ForumQuestion $question, User $user, array $data): ForumQuestion
+    {
+        if ($question->author_user_id !== $user->id || ! in_array($question->status, ['pending_screening', 'flagged'], true)) {
+            throw ValidationException::withMessages(['body' => 'Only your own question can be edited, and only while it waits for review.']);
+        }
+        $text = $data['title'].' '.$data['body'];
+        $check = $this->screenOrReject($text, 'body');
+
+        return DB::transaction(function () use ($question, $data, $text, $check) {
+            $question->fill($data);
+            $question->forceFill(['status' => 'pending_screening'])->save();
+            $this->closeOpenCases('forum_question', $question->id);
+            $this->applyOutcome($question, 'forum_question', $text, $check);
+            app(AuditLogWriter::class)->record('forum.question_edited', 'forum_question', $question->id);
+
+            return $question->refresh();
+        });
+    }
+
+    /** A verified advocate may edit their own answer. It is screened again before it shows. */
+    public function editAnswer(ForumAnswer $answer, User $user, string $body): ForumAnswer
+    {
+        if ($answer->author_user_id !== $user->id || $answer->status === 'removed') {
+            throw ValidationException::withMessages(['body' => 'Only your own answer can be edited.']);
+        }
+        $check = $this->screenOrReject($body, 'body');
+
+        return DB::transaction(function () use ($answer, $body, $check) {
+            $answer->forceFill(['body' => $body, 'status' => 'pending_screening'])->save();
+            $this->closeOpenCases('forum_answer', $answer->id);
+            $this->applyOutcome($answer, 'forum_answer', $body, $check);
+            app(AuditLogWriter::class)->record('forum.answer_edited', 'forum_answer', $answer->id);
+
+            return $answer->refresh();
+        });
+    }
+
     public function answer(ForumQuestion $question, AdvocateProfile $profile, string $body): ForumAnswer
     {
         if ($question->status !== 'published') {
@@ -178,6 +221,13 @@ class ForumService
         }
 
         return $check;
+    }
+
+    /** Screening cases about text that no longer exists. Report cases stay open for moderators. */
+    private function closeOpenCases(string $type, string $id): void
+    {
+        ModerationCase::query()->where(['moderatable_type' => $type, 'moderatable_id' => $id, 'status' => 'pending'])->whereNull('report_id')
+            ->update(['status' => 'edited', 'decided_at' => now(), 'decision_note' => 'Edited by the author', 'updated_at' => now()]);
     }
 
     private function resolve(string $type, string $id): ?Model

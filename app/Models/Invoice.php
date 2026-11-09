@@ -7,7 +7,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property Carbon|null $issue_date
+ * @property Carbon|null $due_date
+ * @property array<string, mixed>|null $supplier_snapshot
+ * @property array<string, mixed>|null $recipient_snapshot
+ */
 class Invoice extends Model
 {
     use HasUuids, SoftDeletes;

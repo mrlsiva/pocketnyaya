@@ -204,6 +204,48 @@ class KnowledgeForumTest extends PracticeTestCase
         $this->post("/staff/moderation/{$case->id}/decide", ['decision' => 'rejected'])->assertSessionHasErrors('decision');
     }
 
+    public function test_author_edits_a_flagged_question_and_it_is_screened_again(): void
+    {
+        $author = $this->citizen();
+        $question = $this->question($author, 'Who is the best lawyer for property?', 'I want to know how property partition works in general.');
+        $this->assertSame('flagged', $question->status);
+        $case = ModerationCase::query()->where('moderatable_id', $question->id)->firstOrFail();
+
+        $this->actingAs($this->citizen())->get("/citizen/forum/{$question->id}/edit")->assertNotFound();
+        $this->put("/citizen/forum/{$question->id}", ['title' => 'How does property partition work?', 'body' => 'I want to know how property partition works in general.'])->assertNotFound();
+
+        $this->actingAs($author)->get('/citizen/forum/mine')->assertOk()->assertSee('Edit');
+        $this->get("/citizen/forum/{$question->id}/edit")->assertOk()->assertSee('best lawyer');
+        $this->put("/citizen/forum/{$question->id}", ['title' => 'Call me on 9876543210 about partition', 'body' => 'I want to know how property partition works in general.'])->assertSessionHasErrors('body');
+        $this->put("/citizen/forum/{$question->id}", ['title' => 'How does property partition work?', 'body' => 'I want to know how property partition works in general.'])->assertRedirect();
+
+        $this->assertSame('published', $question->fresh()->status);
+        $this->assertSame('edited', $case->fresh()->status);
+        $this->get("/citizen/forum/{$question->id}/edit")->assertNotFound();
+        $this->put("/citizen/forum/{$question->id}", ['title' => 'Changing a published question', 'body' => 'This should not be allowed after publishing.'])->assertSessionHasErrors('body');
+    }
+
+    public function test_advocate_edits_own_answer_only_and_edits_are_screened(): void
+    {
+        $question = $this->question();
+        $advocate = $this->advocate();
+        $answer = app(ForumService::class)->answer($question, $advocate->advocateProfile, 'A deposit generally must be returned under the rental agreement.');
+        $this->assertSame('published', $answer->status);
+
+        $this->actingAs($this->advocate())->put("/citizen/forum/answers/{$answer->id}", ['body' => 'Someone else trying to change this answer text.'])->assertNotFound();
+
+        $this->actingAs($advocate);
+        $this->get("/forum/{$question->id}")->assertOk()->assertSee('Edit my answer');
+        $this->put("/citizen/forum/answers/{$answer->id}", ['body' => 'Hire me today and I will sort this out for you.'])->assertSessionHasErrors('body');
+        $this->put("/citizen/forum/answers/{$answer->id}", ['body' => 'I am the best lawyer, and deposits must generally be returned.'])->assertRedirect();
+        $this->assertSame('flagged', $answer->fresh()->status);
+        $this->get("/forum/{$question->id}")->assertDontSee('best lawyer');
+
+        $this->put("/citizen/forum/answers/{$answer->id}", ['body' => 'A deposit must generally be returned, less any lawful deductions.'])->assertRedirect();
+        $this->assertSame('published', $answer->fresh()->status);
+        $this->assertSame(0, ModerationCase::query()->where(['moderatable_id' => $answer->id, 'status' => 'pending'])->count());
+    }
+
     public function test_moderators_never_see_the_author(): void
     {
         $author = $this->citizen();

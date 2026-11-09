@@ -97,10 +97,25 @@ Personal endpoints need no extra header. For practice endpoints, marked **T** be
 | POST | `/odr/disputes/{id}/offers/{offerId}` | `decision: accept` or `reject` |
 | POST | `/odr/disputes/{id}/settlements/{settlementId}` | `decision: accept` or `decline` |
 | GET | `/odr/disputes/{id}/documents/{documentId}` | Download evidence or the unsigned PDF |
+| POST | `/odr/disputes/{id}/evidence` | Upload evidence as multipart with `file` and `title`. It can't be deleted |
+| POST | `/odr/invitations/{token}/accept`, `/odr/invitations/{token}/decline` | Join or decline. The signed-in email must match the invitation (403 if not) |
+
+**Private messages.** In `/odr/disputes/{id}/messages`, a party sends `caucus: true` to write to the mediator only. This works only after the mediator has opened a private conversation with that party (403 before then). In `GET /odr/disputes/{id}`, `my_participant_id` and `is_mediator` tell the app which view to show.
 
 Always label a settlement "Settlement agreement (unsigned)". Accepting records agreement to the terms. It isn't a digital signature, and the app must not describe it as a court order or as enforceable.
 
-Mediator tools, joining by invitation and evidence upload are web-only for now.
+### Online dispute resolution (mediators)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/odr/assignments` | Disputes proposed to me |
+| POST | `/odr/assignments/{id}` | `decision: accept` or `decline`, with a required `conflict_disclosure` |
+| POST | `/odr/disputes/{id}/messages` | With `private_with: <participant id>` to open or continue a private conversation |
+| POST | `/odr/disputes/{id}/sessions` | Schedule: `scheduled_at`, `duration_minutes`, `mode` (`video`, `audio`, `in_person`). No meeting link yet |
+| PUT | `/odr/disputes/{id}/sessions/{sessionId}` | `status: held`, `cancelled` or `no_show`, with an optional `summary` |
+| POST | `/odr/disputes/{id}/settlements` | Generate the unsigned agreement from a reviewed template (`template_id`, `terms`). Templates are listed in the dispute detail |
+| POST | `/odr/disputes/{id}/settlements/{settlementId}/void` | Withdraw a settlement no one has fully accepted |
+| POST | `/odr/disputes/{id}/close` | Close without settlement, with `closure_reason` |
 
 ### Practice (**T**)
 
@@ -118,6 +133,9 @@ Mediator tools, joining by invitation and evidence upload are web-only for now.
 | GET, POST | `/invoices` | List, or create a draft |
 | GET | `/invoices/{id}` | Detail. On a restricted matter, `redacted` is true and descriptions are null |
 | POST | `/invoices/{id}/lines`, `/invoices/{id}/issue`, `/invoices/{id}/payments` | Billing steps |
+| POST | `/invoices/{id}/time` | Add approved, unbilled time: `entries` (list of IDs) and `hourly_rate` |
+| POST | `/invoices/{id}/expenses` | Add reimbursable expenses: `expenses` (list of IDs). Pure-agent expenses are refused for now |
+| GET | `/invoices/{id}/pdf` | The issued invoice as a PDF. 422 for drafts, 403 if you only see it redacted |
 | GET, POST | `/time-entries` | Own time |
 
 ## Rules for the app

@@ -7,6 +7,7 @@ use App\Http\Controllers\Web\Auth\RegisterController;
 use App\Http\Controllers\Web\Auth\SessionController;
 use App\Http\Controllers\Web\Billing\FeeController;
 use App\Http\Controllers\Web\Billing\InvoiceController;
+use App\Http\Controllers\Web\Billing\RetainerController;
 use App\Http\Controllers\Web\Billing\TimeExpenseController;
 use App\Http\Controllers\Web\Citizen\AdvocateProfileController;
 use App\Http\Controllers\Web\Citizen\PracticeSetupController;
@@ -30,6 +31,7 @@ use App\Http\Controllers\Web\Staff\AdminController;
 use App\Http\Controllers\Web\Staff\ComplianceController;
 use App\Http\Controllers\Web\Staff\ModerationController;
 use App\Http\Controllers\Web\Staff\OdrIntakeController;
+use App\Http\Controllers\Web\Staff\StaffTeamController;
 use App\Http\Controllers\Web\Staff\TaxRuleController;
 use App\Http\Controllers\Web\Staff\VerificationQueueController;
 use App\Http\Controllers\Web\WorkspaceController;
@@ -119,6 +121,9 @@ Route::middleware(['auth', 'active'])->group(function () {
             Route::get('forum/ask', [ForumController::class, 'create'])->middleware('pn.can:forum.questions.create')->name('forum.create');
             Route::post('forum', [ForumController::class, 'store'])->middleware('pn.can:forum.questions.create')->name('forum.store');
             Route::get('forum/mine', [ForumController::class, 'mine'])->middleware('pn.can:forum.questions.create')->name('forum.mine');
+            Route::get('forum/{question}/edit', [ForumController::class, 'edit'])->middleware('pn.can:forum.questions.update_own')->name('forum.edit');
+            Route::put('forum/{question}', [ForumController::class, 'update'])->middleware('pn.can:forum.questions.update_own')->name('forum.update');
+            Route::put('forum/answers/{answer}', [ForumController::class, 'updateAnswer'])->middleware('pn.can:forum.answers.update_own')->name('forum.answers.update');
             Route::post('forum/comments', [ForumController::class, 'comment'])->middleware('pn.can:forum.comments.create')->name('forum.comment');
             Route::post('forum/reports', [ForumController::class, 'report'])->middleware('pn.can:forum.reports.create')->name('forum.report');
             Route::post('forum/{question}/answers', [ForumController::class, 'answer'])->middleware('pn.can:forum.answers.create')->name('forum.answer');
@@ -196,6 +201,11 @@ Route::middleware(['auth', 'active'])->group(function () {
                 Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy'])->name('invoices.destroy');
                 Route::post('invoices/{invoice}/lines', [InvoiceController::class, 'addLine'])->name('invoices.lines.store');
                 Route::delete('invoices/{invoice}/lines/{line}', [InvoiceController::class, 'removeLine'])->name('invoices.lines.destroy');
+                Route::post('invoices/{invoice}/time', [InvoiceController::class, 'addTime'])->name('invoices.time.store');
+                Route::post('invoices/{invoice}/expenses', [InvoiceController::class, 'addExpenses'])->name('invoices.expenses.store');
+                Route::post('invoices/{invoice}/schedule-items', [InvoiceController::class, 'addScheduleItem'])->name('invoices.schedule.store');
+                Route::post('invoices/{invoice}/retainers', [InvoiceController::class, 'addRetainer'])->name('invoices.retainers.store');
+                Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'pdf'])->name('invoices.pdf');
                 Route::post('invoices/{invoice}/issue', [InvoiceController::class, 'issue'])->name('invoices.issue');
                 Route::post('invoices/{invoice}/cancel', [InvoiceController::class, 'cancel'])->name('invoices.cancel');
                 Route::post('invoices/{invoice}/payments', [InvoiceController::class, 'recordPayment'])->name('invoices.payments.store');
@@ -206,6 +216,15 @@ Route::middleware(['auth', 'active'])->group(function () {
                 Route::get('fees', [FeeController::class, 'index'])->name('fees.index');
                 Route::post('fees', [FeeController::class, 'store'])->name('fees.store');
                 Route::post('fees/{arrangement}/end', [FeeController::class, 'end'])->name('fees.end');
+                Route::post('fees/{arrangement}/items', [FeeController::class, 'storeItem'])->name('fees.items.store');
+                Route::delete('fee-items/{item}', [FeeController::class, 'destroyItem'])->name('fees.items.destroy');
+            });
+            Route::middleware('pn.can:billing.retainer_plans.manage|billing.retainer_work.manage|billing.retainer_work.update_assigned')->group(function () {
+                Route::get('retainers', [RetainerController::class, 'index'])->name('retainers.index');
+                Route::post('retainers/plans', [RetainerController::class, 'storePlan'])->name('retainers.plans.store');
+                Route::post('retainers/plans/{plan}/toggle', [RetainerController::class, 'togglePlan'])->name('retainers.plans.toggle');
+                Route::post('retainers/work', [RetainerController::class, 'storeWork'])->name('retainers.work.store');
+                Route::put('retainers/work/{item}', [RetainerController::class, 'updateWork'])->name('retainers.work.update');
             });
             Route::get('time', [TimeExpenseController::class, 'index'])->name('time.index');
             Route::post('time', [TimeExpenseController::class, 'storeTime'])->name('time.store');
@@ -296,6 +315,13 @@ Route::middleware(['auth', 'active'])->group(function () {
                     Route::get('plans', [AdminController::class, 'plans'])->name('plans');
                     Route::post('plans', [AdminController::class, 'storePlan'])->name('plans.store');
                     Route::post('plans/{plan}/toggle', [AdminController::class, 'togglePlan'])->name('plans.toggle');
+                });
+                Route::middleware('pn.can:platform.staff_roles.assign|platform.superadmin.propose|platform.superadmin.approve')->group(function () {
+                    Route::get('team', [StaffTeamController::class, 'index'])->name('team');
+                    Route::post('team/compliance-officers', [StaffTeamController::class, 'complianceOfficer'])->name('team.compliance');
+                    Route::post('team/super-admin-proposals', [StaffTeamController::class, 'propose'])->name('team.propose');
+                    Route::post('team/super-admin-proposals/{person}', [StaffTeamController::class, 'decide'])->name('team.decide');
+                    Route::post('team/super-admins/{person}/revoke', [StaffTeamController::class, 'revokeSuperAdmin'])->name('team.revoke');
                 });
                 Route::middleware('pn.can:platform.reference_data.manage')->group(function () {
                     Route::get('reference', [AdminController::class, 'reference'])->name('reference');

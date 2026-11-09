@@ -154,7 +154,7 @@ class DocumentController extends Controller
     public function destroy(Request $request, Document $document, DocumentVault $vault): RedirectResponse
     {
         Gate::authorize('delete', $document);
-        abort_if(LegalHold::isActive('document', $document->id), 422, 'A legal hold covers this document, so it cannot be removed.');
+        abort_if(LegalHold::coversDocument($document), 422, 'A legal hold covers this document, so it cannot be removed.');
         /** @var User $user */
         $user = $request->user();
         $vault->log($document, 'delete', $user);

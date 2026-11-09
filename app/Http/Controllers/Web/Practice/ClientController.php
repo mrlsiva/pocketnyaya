@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Web\Practice;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Practice\ClientRequest;
 use App\Models\Client;
+use App\Models\LegalHold;
 use App\Models\Matter;
 use App\Models\User;
 use App\Support\AccessContext;
@@ -78,6 +79,7 @@ class ClientController extends Controller
     public function destroy(Client $client): RedirectResponse
     {
         Gate::authorize('delete', $client);
+        abort_if(LegalHold::coversClient($client), 422, 'A legal hold covers this client, so it cannot be removed.');
         $client->delete();
 
         return redirect()->route('practice.clients.index')->with('status', 'Client removed.');

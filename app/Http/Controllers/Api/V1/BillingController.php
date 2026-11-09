@@ -9,12 +9,14 @@ use App\Models\InvoiceLine;
 use App\Models\Matter;
 use App\Models\TimeEntry;
 use App\Models\User;
+use App\Services\AuditLogWriter;
 use App\Services\Billing\InvoiceService;
 use App\Support\AccessContext;
 use App\Support\BillingAccess;
 use App\Support\MatterAccess;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Validation\Rule;
 
 /** The same rules as the web screens, including redaction for restricted matters (DA-29). */
@@ -73,6 +75,46 @@ class BillingController extends Controller
         $invoices->addLine($invoice, array_map('strval', $data));
 
         return response()->json($this->summary($invoice->fresh() ?? $invoice), 201);
+    }
+
+    /** Approved, billable, unbilled time for this invoice's client becomes lines at this hourly rate. */
+    public function addTime(Request $request, Invoice $invoice, InvoiceService $invoices): JsonResponse
+    {
+        $this->authorizeEdit($request, $invoice, 'billing.invoices.create_draft');
+        $data = $request->validate([
+            'entries' => ['required', 'array', 'min:1', 'max:200'],
+            'entries.*' => ['uuid'],
+            'hourly_rate' => ['required', 'numeric', 'min:0', 'max:99999999', 'decimal:0,2'],
+        ]);
+        $invoices->addTimeEntries($invoice, array_values($data['entries']), (string) $data['hourly_rate']);
+
+        return response()->json($this->summary($invoice->fresh() ?? $invoice), 201);
+    }
+
+    /** Reimbursable expenses become lines. Pure-agent expenses are refused until a rule exists. */
+    public function addExpenses(Request $request, Invoice $invoice, InvoiceService $invoices): JsonResponse
+    {
+        $this->authorizeEdit($request, $invoice, 'billing.invoices.create_draft');
+        $data = $request->validate(['expenses' => ['required', 'array', 'min:1', 'max:200'], 'expenses.*' => ['uuid']]);
+        $invoices->addExpenses($invoice, array_values($data['expenses']));
+
+        return response()->json($this->summary($invoice->fresh() ?? $invoice), 201);
+    }
+
+    /** The issued invoice as a PDF. Not available for drafts or to viewers who see it redacted. */
+    public function pdf(Request $request, Invoice $invoice, InvoiceService $invoices): Response
+    {
+        $user = $this->user($request);
+        abort_unless(BillingAccess::canViewInvoice($user, $invoice), 404);
+        abort_if($invoice->status === 'draft', 422, 'Issue the invoice first.');
+        abort_if(BillingAccess::isRedacted($user, $invoice), 403);
+        app(AuditLogWriter::class)->record('billing.invoice_downloaded', 'invoice', $invoice->id, $invoice->tenant_id);
+
+        return response($invoices->pdf($invoice->load('lines')), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="'.str_replace('/', '-', (string) $invoice->invoice_number).'.pdf"',
+            'Cache-Control' => 'private, no-store',
+        ]);
     }
 
     public function issue(Request $request, Invoice $invoice, InvoiceService $invoices): JsonResponse

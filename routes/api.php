@@ -71,6 +71,18 @@ Route::middleware(['auth:sanctum', 'active', 'api.ability'])->group(function () 
             Route::post('odr/disputes/{dispute}/offers/{offer}', [OdrController::class, 'respondOffer']);
             Route::post('odr/disputes/{dispute}/settlements/{settlement}', [OdrController::class, 'respondSettlement']);
             Route::get('odr/disputes/{dispute}/documents/{document}', [OdrController::class, 'download']);
+            Route::post('odr/disputes/{dispute}/evidence', [OdrController::class, 'evidence']);
+            Route::post('odr/invitations/{token}/accept', [OdrController::class, 'acceptInvitation'])->middleware('throttle:auth');
+            Route::post('odr/invitations/{token}/decline', [OdrController::class, 'declineInvitation'])->middleware('throttle:auth');
+
+            // Mediator tools
+            Route::get('odr/assignments', [OdrController::class, 'assignments']);
+            Route::post('odr/assignments/{assignment}', [OdrController::class, 'respondAssignment']);
+            Route::post('odr/disputes/{dispute}/sessions', [OdrController::class, 'schedule']);
+            Route::put('odr/disputes/{dispute}/sessions/{session}', [OdrController::class, 'updateSession']);
+            Route::post('odr/disputes/{dispute}/settlements', [OdrController::class, 'generate']);
+            Route::post('odr/disputes/{dispute}/settlements/{settlement}/void', [OdrController::class, 'voidSettlement']);
+            Route::post('odr/disputes/{dispute}/close', [OdrController::class, 'close']);
         });
 
         Route::middleware('tenant.context')->group(function () {
@@ -95,6 +107,9 @@ Route::middleware(['auth:sanctum', 'active', 'api.ability'])->group(function () 
                 Route::post('invoices', [BillingController::class, 'store']);
                 Route::get('invoices/{invoice}', [BillingController::class, 'show']);
                 Route::post('invoices/{invoice}/lines', [BillingController::class, 'addLine']);
+                Route::post('invoices/{invoice}/time', [BillingController::class, 'addTime']);
+                Route::post('invoices/{invoice}/expenses', [BillingController::class, 'addExpenses']);
+                Route::get('invoices/{invoice}/pdf', [BillingController::class, 'pdf']);
                 Route::post('invoices/{invoice}/issue', [BillingController::class, 'issue']);
                 Route::post('invoices/{invoice}/payments', [BillingController::class, 'pay']);
             });

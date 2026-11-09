@@ -33,7 +33,7 @@ class ErasureService
             $retained = [];
 
             foreach (Document::query()->where(['scope' => 'personal', 'owner_user_id' => $user->id])->get() as $document) {
-                if (LegalHold::isActive('document', $document->id)) {
+                if (LegalHold::coversDocument($document)) {
                     $this->action($request, 'documents', $document->id, 'retained', ['reason' => 'legal_hold']);
                     $retained[] = ['type' => 'document', 'reason' => 'legal_hold'];
 

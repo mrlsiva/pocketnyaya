@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\AdvocateProfile;
+use App\Models\ForumAnswer;
 use App\Models\ForumComment;
 use App\Models\ForumQuestion;
 use App\Models\User;
@@ -70,6 +71,39 @@ class ForumController extends Controller
         return $question->status === 'published'
             ? redirect()->route('forum.show', $question)->with('status', 'Your question is published. Your name is not shown.')
             : redirect()->route('citizen.forum.mine')->with('status', 'Your question is waiting for a moderator to review it.');
+    }
+
+    public function edit(Request $request, ForumQuestion $question): View
+    {
+        abort_unless($question->author_user_id === $this->user($request)->id && in_array($question->status, ['pending_screening', 'flagged'], true), 404);
+
+        return view('forum.ask', ['question' => $question, 'areas' => DB::table('practice_areas')->where('is_active', true)->orderBy('name')->get(['id', 'name'])]);
+    }
+
+    public function update(Request $request, ForumQuestion $question, ForumService $forum): RedirectResponse
+    {
+        abort_unless($question->author_user_id === $this->user($request)->id, 404);
+        $data = $request->validate([
+            'title' => ['required', 'string', 'min:10', 'max:200'],
+            'body' => ['required', 'string', 'min:20', 'max:5000'],
+            'practice_area_id' => ['nullable', 'integer', 'exists:practice_areas,id'],
+        ]);
+        $question = $forum->editQuestion($question, $this->user($request), $data);
+
+        return $question->status === 'published'
+            ? redirect()->route('forum.show', $question)->with('status', 'Your question is published. Your name is not shown.')
+            : redirect()->route('citizen.forum.mine')->with('status', 'Your edited question is waiting for a moderator to review it.');
+    }
+
+    public function updateAnswer(Request $request, ForumAnswer $answer, ForumService $forum): RedirectResponse
+    {
+        $user = $this->user($request);
+        abort_unless($answer->author_user_id === $user->id, 404);
+        abort_unless($user->advocateProfile?->verification_status === 'verified', 403);
+        $data = $request->validate(['body' => ['required', 'string', 'min:20', 'max:10000']]);
+        $answer = $forum->editAnswer($answer, $user, $data['body']);
+
+        return back()->with('status', $answer->status === 'published' ? 'Your answer is updated.' : 'Your edited answer is waiting for a moderator to review it.');
     }
 
     public function mine(Request $request): View

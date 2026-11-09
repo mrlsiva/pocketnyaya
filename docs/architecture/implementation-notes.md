@@ -48,7 +48,15 @@ The column is `DATETIME(6) NULL` on both tables, following the approved `timesta
 | Screening rules, consent wording, disclaimers | Seeded English text | **Drafts. Counsel must review before launch** |
 | Invoice number format | `INV/2627/1`, per tenant and financial year, 16 characters at most | The prefix and layout aren't specified. A CA should confirm |
 | Reverse charge | Rate is recorded on the line, and no tax is added to the invoice total | **A CA must confirm** |
-| `SimplePdf` | A small text-only PDF writer, with no new package | Western characters only |
+| `SimplePdf` | A small text-only PDF writer, with no new package | Western characters only. Invoice PDFs print `Rs.` instead of the rupee sign |
+| Super Admin proposals | Stored as the approved audit events `superadmin.proposed`, `superadmin.approved` and a new `superadmin.proposal_withdrawn`, with no new table | D9 names the events but not where a pending proposal lives. **Needs review** |
+| Super Admin removal | Allowed with `platform.superadmin.approve`, never your own, and only while more than 2 active Super Admins remain | D9 sets the floor of 2 but doesn't say who removes |
+| Compliance Officer grant | Creates or restores the person's platform membership. Revoking leaves the membership, so their Customer and other platform roles are untouched | C24 needs a membership, and ending it would remove their other platform roles |
+| Time on invoices | One line per approved, billable, unbilled entry, at an hourly rate entered on the invoice (defaulting to the client's hourly arrangement). Amounts are exact in paise from minutes | The design doesn't say whether the rate comes from the arrangement or the entry |
+| Released work | Removing a line, deleting a draft or cancelling an invoice makes its time and expenses billable again. The cancelled invoice keeps its lines | So cancelled work isn't lost. **A CA should confirm** |
+| Pure-agent expenses | Refused on invoices | The tax engine would tax them. They need a CA-approved rule |
+| Legal hold coverage | Document deletion and erasure check holds on the document, its practice, matter, dispute and (for personal files) owner. Matter and client deletion check matter and practice holds | Follows C60 §4.2. Previously only document and user holds were checked |
+| Forum edits | Questions can be edited only while waiting for review. Answers can be edited by their author at any time. Both are screened again, and old screening cases close as `edited` | D8.11 |
 
 ## MariaDB 10.4 substitutions
 
@@ -64,7 +72,7 @@ These need re-checking on the approved target.
 ### Blocked on a decision or missing definition
 
 - **`tenant_offboarding`**, the 11th tenancy table. **No definition exists anywhere in the approved design.** Closing a practice is disabled until there is one: `platform.tenants.close` has no route, and `tenants.status = closed` can't be set from the screens.
-- **Audit storage (MY-18).** Built as option B, unpartitioned. The U4 decision was recorded as a recommendation, so please confirm it.
+- **Audit storage (MY-18 / C60).** The design is approved: U4 chose option B, unpartitioned, for the MVP, and U5 approved the retention account and gate row, subject to tests. The built code is stricter than C60 (no deletion at all) and lacks the `pn_retention` account, the hold gate triggers and the archive. Tests RT and PB haven't run.
 
 ### Needs credentials, legal checks or later phases
 
@@ -82,9 +90,10 @@ These need re-checking on the approved target.
 - **MySQL isolation layer:** `pn_access_context`, tenant and personal views, T3 write procedures, separate database accounts
 - **Retention enforcement:** rules can be drafted and approved, but no job applies them. The C60 exemption for append-only tables is also not built, and neither is partition or archive maintenance
 - **P1 emergency staff access:** rejected, so correctly absent
-- **Super Admin propose and approve** (`platform.superadmin.*`) and staff role assignment screens. New staff must be set up by a developer
-- **Subscription enforcement:** plans can be managed, but limits and feature gates aren't applied
-- **Screens not built:** forum `update_own`, comment moderation by report only, retainer plans and retainer work items (tables exist), fee schedule items (table exists), generating invoice lines from time entries, invoice PDF (browser print only), credit notes
+- **Subscription enforcement:** plans can be managed, but limits and feature gates aren't applied. The design never defines the limits
+- **Credit notes:** the schema allows them (`invoice_type = credit_note`, a `CN` series), but the design doesn't say how a credit note reduces the original invoice's balance. **A CA must decide**
+- **Screens not built:** comment editing, and comment moderation by report only
+- **Mobile API:** team management and verification applications are still web-only
 - **Tests still PENDING from the approved plans:** TX-C1 to TX-C9 concurrency, V1, VW, IS, DS16 to DS21 as named, CT13 to CT16 on MySQL, RT, PB and PT
 
 ## Unverified
