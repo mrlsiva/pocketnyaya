@@ -66,7 +66,7 @@ Values are set on the server only, never committed, and never pasted into chat o
 ## 5. Queue and scheduler
 
 - **Queue worker** under Supervisor: `php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600`, with 2 processes, restarted on every deploy with `php artisan queue:restart`.
-- **Scheduler**, from cron every minute: `* * * * * cd /var/www/pocketnyaya/current && php artisan schedule:run >> /dev/null 2>&1`. It runs the daily audit digest at 00:30 India time.
+- **Scheduler**, from cron every minute: `* * * * * cd /var/www/pocketnyaya/current && php artisan schedule:run >> /dev/null 2>&1`. It runs the daily audit digest at 00:30 and the retention dry run at 01:00, both India time.
 
 ## 6. Storage permissions
 
