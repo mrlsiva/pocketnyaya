@@ -8,6 +8,7 @@ use App\Models\FeeScheduleItem;
 use App\Models\Invoice;
 use App\Models\Matter;
 use App\Models\MatterExpense;
+use App\Models\Payment;
 use App\Models\RetainerPlan;
 use App\Models\RetainerWorkItem;
 use App\Models\TaxRule;
@@ -302,6 +303,42 @@ class BillingSourcesTest extends PracticeTestCase
         $other = $this->firm();
         Sanctum::actingAs($this->member($other, 'Managing Partner'), ['api:read', 'api:write']);
         $this->getJson("/api/v1/invoices/{$invoice->id}/pdf", ['X-Tenant-ID' => $other])->assertNotFound();
+    }
+
+    public function test_credit_note_reduces_the_balance_with_proportional_tax_and_is_final(): void
+    {
+        $this->rule();
+        $firm = $this->firm();
+        $client = $this->client($firm);
+        $finance = $this->member($firm, 'Finance Manager');
+        $service = app(InvoiceService::class);
+        $invoice = $service->createDraft($client, null, null, null);
+        $service->addLine($invoice, ['line_type' => 'professional_fee', 'description' => 'Synthetic fee', 'quantity' => '1', 'unit_price' => '1000']);
+        $issued = $service->issue($invoice->fresh());
+        $this->assertSame('1180.00', $issued->total_amount);
+
+        $this->inTenant($finance, $firm);
+        $this->post("/practice/invoices/{$issued->id}/credit-notes", ['amount' => '1180.01', 'reason' => 'Too much'])->assertSessionHasErrors('amount');
+        $this->post("/practice/invoices/{$issued->id}/credit-notes", ['amount' => '590', 'reason' => 'Half the work was not done'])->assertRedirect();
+
+        $note = Invoice::query()->where(['original_invoice_id' => $issued->id, 'invoice_type' => 'credit_note'])->firstOrFail();
+        $this->assertMatchesRegularExpression('#^CN/\d{4}/1$#', (string) $note->invoice_number);
+        $this->assertSame(['500.00', '45.00', '45.00', '590.00'], [$note->subtotal, $note->cgst_amount, $note->sgst_amount, $note->total_amount]);
+        $original = $issued->fresh();
+        $this->assertSame('590.00', $original->balance_due);
+        $this->assertSame('partially_paid', $original->status);
+
+        $creditPayment = Payment::query()->where(['method' => 'credit_note', 'reference_number' => $note->invoice_number])->firstOrFail();
+        $this->assertThrows(fn () => $service->reversePayment($creditPayment), ValidationException::class);
+        $this->assertThrows(fn () => $service->issueCreditNote($note, $finance, '1', 'X'), ValidationException::class);
+        $this->assertThrows(fn () => $service->cancel($original, 'X'), ValidationException::class);
+
+        $this->get("/practice/invoices/{$note->id}")->assertOk()->assertSee('Credit note against')->assertDontSee('Record a payment');
+        $this->assertStringContainsString('Credit note', $service->pdf($note->load('lines')));
+        $this->get('/practice/reports')->assertOk()->assertSee('₹500.00')->assertSee('₹590.00');
+
+        $this->inTenant($this->member($firm, 'Senior Associate'), $firm);
+        $this->post("/practice/invoices/{$issued->id}/credit-notes", ['amount' => '1', 'reason' => 'X'])->assertForbidden();
     }
 
     public function test_deleting_a_draft_on_screen_releases_its_time(): void

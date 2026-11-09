@@ -19,6 +19,9 @@
                                     <button class="btn btn-outline-secondary btn-sm" name="status" value="{{ $tenant->status === 'active' ? 'suspended' : 'active' }}" type="submit">{{ $tenant->status === 'active' ? 'Suspend' : 'Reactivate' }}</button>
                                 </form>
                             @endif
+                            @if ($tenant->status !== 'closed' && \App\Support\AccessContext::staffCan(auth()->user(), 'platform.tenants.close'))
+                                <a class="small" href="{{ route('staff.admin.offboarding.create', $tenant) }}">Close practice…</a>
+                            @endif
                         </td>
                     </tr>
                 @empty

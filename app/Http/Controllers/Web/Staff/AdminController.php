@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Web\Staff;
 
 use App\Http\Controllers\Controller;
 use App\Models\Tenant;
+use App\Models\TenantOffboarding;
 use App\Models\User;
 use App\Services\AuditLogWriter;
 use App\Services\SecurityRevocationService;
@@ -36,6 +37,7 @@ class AdminController extends Controller
         abort_if($tenant->type === 'platform', 404);
         $data = $request->validate(['status' => ['required', Rule::in(['active', 'suspended'])], 'reason' => ['required', 'string', 'max:500']]);
         abort_if($tenant->status === 'closed', 422, 'A closed practice cannot be changed.');
+        abort_if(TenantOffboarding::query()->where('tenant_id', $tenant->id)->whereIn('status', ['requested', 'suspended', 'export_open'])->exists(), 422, 'This practice is being closed. Cancel the closure to change its status.');
 
         $old = $tenant->status;
         DB::transaction(function () use ($tenant, $data, $old) {

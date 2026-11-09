@@ -286,7 +286,7 @@ class InvoiceService
         return DB::transaction(function () use ($invoice, $user, $data) {
             /** @var Invoice $locked */
             $locked = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
-            if (! in_array($locked->status, ['issued', 'partially_paid'], true)) {
+            if ($locked->invoice_type === 'credit_note' || ! in_array($locked->status, ['issued', 'partially_paid'], true)) {
                 throw ValidationException::withMessages(['amount' => 'This invoice cannot take a payment.']);
             }
 
@@ -312,6 +312,72 @@ class InvoiceService
         });
     }
 
+    /**
+     * A credit note against an issued invoice (owner decision 2026-11-09, provisional until a CA reviews it).
+     * It gets its own CN number, carries the original's tax split in proportion, and reduces the
+     * original's balance through a credit_note allocation, so every total still reconciles.
+     * The amount is the total to credit, tax included, and can't exceed the balance due.
+     */
+    public function issueCreditNote(Invoice $original, User $user, string $amount, string $reason): Invoice
+    {
+        return DB::transaction(function () use ($original, $user, $amount, $reason) {
+            /** @var Invoice $locked */
+            $locked = Invoice::query()->whereKey($original->id)->lockForUpdate()->firstOrFail();
+            if ($locked->invoice_type === 'credit_note' || ! in_array($locked->status, ['issued', 'partially_paid'], true)) {
+                throw ValidationException::withMessages(['amount' => 'A credit note can only be raised against an issued invoice with a balance due.']);
+            }
+            $total = Money::toPaise($amount);
+            $originalTotal = Money::toPaise($locked->total_amount);
+            if ($total <= 0 || $total > Money::toPaise($locked->balance_due) || $originalTotal <= 0) {
+                throw ValidationException::withMessages(['amount' => 'The credit must be more than zero and no more than the balance due.']);
+            }
+
+            // Tax in the same proportion as the original, rounded half up; the taxable value takes the remainder.
+            $share = fn (string|int|float $component): int => intdiv(Money::toPaise($component) * $total * 2 + $originalTotal, $originalTotal * 2);
+            $cgst = $share($locked->cgst_amount);
+            $sgst = $share($locked->sgst_amount);
+            $igst = $share($locked->igst_amount);
+            $taxable = $total - $cgst - $sgst - $igst;
+            $today = now();
+            /** @var InvoiceLine|null $firstLine */
+            $firstLine = $locked->lines()->first();
+
+            $note = new Invoice(['notes' => $reason]);
+            $note->forceFill([
+                'tenant_id' => $locked->tenant_id, 'client_id' => $locked->client_id, 'matter_id' => $locked->matter_id,
+                'invoice_type' => 'credit_note', 'original_invoice_id' => $locked->id, 'charge_mechanism' => $locked->charge_mechanism,
+                'invoice_number' => $this->nextNumber($locked->tenant_id, 'CN', $today),
+                'issue_date' => $today->toDateString(), 'issued_at' => $today, 'status' => 'issued',
+                'supplier_snapshot' => $locked->supplier_snapshot, 'recipient_snapshot' => $locked->recipient_snapshot, 'place_of_supply' => $locked->place_of_supply,
+                'subtotal' => Money::fromPaise($taxable), 'cgst_amount' => Money::fromPaise($cgst), 'sgst_amount' => Money::fromPaise($sgst), 'igst_amount' => Money::fromPaise($igst),
+                'total_tax' => Money::fromPaise($cgst + $sgst + $igst), 'round_off' => '0.00', 'total_amount' => Money::fromPaise($total),
+                // Applied in full to the original invoice at once, so nothing is left to settle on the note itself.
+                'amount_paid' => Money::fromPaise($total), 'balance_due' => '0.00',
+            ])->save();
+
+            $line = new InvoiceLine(['line_type' => 'professional_fee', 'description' => mb_substr("Credit against {$locked->invoice_number}: {$reason}", 0, 500), 'quantity' => '1', 'unit_price' => Money::fromPaise($taxable)]);
+            $line->forceFill([
+                'tenant_id' => $locked->tenant_id, 'invoice_id' => $note->id, 'amount' => Money::fromPaise($taxable),
+                'sac_code' => $firstLine->sac_code ?? '9982', 'tax_rule_id' => $firstLine?->tax_rule_id, 'tax_rule_snapshot' => $firstLine?->tax_rule_snapshot,
+                'charge_mechanism' => $firstLine->charge_mechanism ?? 'forward',
+                'cgst_rate' => $firstLine->cgst_rate ?? 0, 'cgst_amount' => Money::fromPaise($cgst),
+                'sgst_rate' => $firstLine->sgst_rate ?? 0, 'sgst_amount' => Money::fromPaise($sgst),
+                'igst_rate' => $firstLine->igst_rate ?? 0, 'igst_amount' => Money::fromPaise($igst),
+                'line_total' => Money::fromPaise($total),
+            ])->save();
+
+            $payment = new Payment(['amount' => Money::fromPaise($total), 'payment_date' => $today->toDateString(), 'method' => 'credit_note', 'reference_number' => $note->invoice_number, 'notes' => $reason]);
+            $payment->forceFill(['tenant_id' => $locked->tenant_id, 'client_id' => $locked->client_id, 'status' => 'recorded', 'received_by' => $user->id])->save();
+            $allocation = new PaymentAllocation;
+            $allocation->forceFill(['tenant_id' => $locked->tenant_id, 'payment_id' => $payment->id, 'invoice_id' => $locked->id, 'amount' => Money::fromPaise($total), 'tds_amount' => '0.00'])->save();
+
+            $this->applyPayments($locked);
+            app(AuditLogWriter::class)->record('billing.credit_note_issued', 'invoice', $note->id, $locked->tenant_id, null, ['original_invoice_id' => $locked->id, 'total' => Money::fromPaise($total)]);
+
+            return $note->fresh() ?? $note;
+        });
+    }
+
     public function reversePayment(Payment $payment): void
     {
         DB::transaction(function () use ($payment) {
@@ -319,6 +385,9 @@ class InvoiceService
             $locked = Payment::query()->whereKey($payment->id)->lockForUpdate()->firstOrFail();
             if ($locked->status !== 'recorded') {
                 throw ValidationException::withMessages(['payment' => 'Only a recorded payment can be reversed.']);
+            }
+            if ($locked->method === 'credit_note') {
+                throw ValidationException::withMessages(['payment' => 'A credit note is final and can\'t be reversed. Issue a new invoice instead.']);
             }
             $locked->forceFill(['status' => 'reversed'])->save();
             app(AuditLogWriter::class)->record('billing.payment_reversed', 'payment', $locked->id, $locked->tenant_id);
@@ -421,7 +490,11 @@ class InvoiceService
         $rs = fn ($amount): string => str_replace('₹', 'Rs. ', Money::format($amount));
         $supplier = $invoice->supplier_snapshot ?? [];
         $recipient = $invoice->recipient_snapshot ?? [];
-        $label = $invoice->invoice_type === 'bill_of_supply' ? 'Bill of supply' : 'Tax invoice';
+        $label = match ($invoice->invoice_type) {
+            'bill_of_supply' => 'Bill of supply',
+            'credit_note' => 'Credit note',
+            default => 'Tax invoice',
+        };
 
         $paragraphs = [
             "{$label} {$invoice->invoice_number}".($invoice->status === 'cancelled' ? ' (CANCELLED)' : ''),
@@ -430,6 +503,9 @@ class InvoiceService
             'Bill to: '.($recipient['name'] ?? '').(empty($recipient['gstin']) ? '' : '    GSTIN: '.$recipient['gstin']).(empty($recipient['address']) ? '' : "\n".$recipient['address']),
             'Place of supply (state code): '.$invoice->place_of_supply,
         ];
+        if ($invoice->invoice_type === 'credit_note') {
+            $paragraphs[] = 'Against invoice: '.Invoice::query()->whereKey($invoice->original_invoice_id)->value('invoice_number');
+        }
         foreach ($invoice->lines as $i => $line) {
             $tax = Money::toPaise($line->cgst_amount) + Money::toPaise($line->sgst_amount) + Money::toPaise($line->igst_amount);
             $paragraphs[] = ($i + 1).'. '.$line->description."\n   SAC {$line->sac_code}   Qty {$line->quantity} x ".$rs($line->unit_price).' = '.$rs($line->amount).'   Tax '.$rs(Money::fromPaise($tax));

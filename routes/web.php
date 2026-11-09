@@ -19,6 +19,7 @@ use App\Http\Controllers\Web\EmergencyController;
 use App\Http\Controllers\Web\ForumController;
 use App\Http\Controllers\Web\InvitationController;
 use App\Http\Controllers\Web\OdrController;
+use App\Http\Controllers\Web\OffboardingExportController;
 use App\Http\Controllers\Web\Practice\ClientController;
 use App\Http\Controllers\Web\Practice\DiaryController;
 use App\Http\Controllers\Web\Practice\KnowledgeController;
@@ -31,6 +32,7 @@ use App\Http\Controllers\Web\Staff\AdminController;
 use App\Http\Controllers\Web\Staff\ComplianceController;
 use App\Http\Controllers\Web\Staff\ModerationController;
 use App\Http\Controllers\Web\Staff\OdrIntakeController;
+use App\Http\Controllers\Web\Staff\OffboardingController;
 use App\Http\Controllers\Web\Staff\StaffTeamController;
 use App\Http\Controllers\Web\Staff\TaxRuleController;
 use App\Http\Controllers\Web\Staff\VerificationQueueController;
@@ -72,6 +74,8 @@ Route::middleware(['auth', 'active'])->group(function () {
         Route::post('odr/invitations/{token}/accept', [OdrController::class, 'acceptInvitation'])->name('odr.invitations.accept');
         Route::post('odr/invitations/{token}/decline', [OdrController::class, 'declineInvitation'])->name('odr.invitations.decline');
         Route::get('workspaces', [WorkspaceController::class, 'index'])->name('workspaces.index');
+        Route::get('practice-exports', [OffboardingExportController::class, 'mine'])->name('offboarding.mine');
+        Route::get('practice-exports/{offboarding}/download', [OffboardingExportController::class, 'download'])->middleware('throttle:auth')->name('offboarding.download');
         Route::post('tenant/switch', [WorkspaceController::class, 'switch'])->name('tenant.switch');
 
         Route::get('profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -206,6 +210,7 @@ Route::middleware(['auth', 'active'])->group(function () {
                 Route::post('invoices/{invoice}/schedule-items', [InvoiceController::class, 'addScheduleItem'])->name('invoices.schedule.store');
                 Route::post('invoices/{invoice}/retainers', [InvoiceController::class, 'addRetainer'])->name('invoices.retainers.store');
                 Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'pdf'])->name('invoices.pdf');
+                Route::post('invoices/{invoice}/credit-notes', [InvoiceController::class, 'creditNote'])->name('invoices.credit');
                 Route::post('invoices/{invoice}/issue', [InvoiceController::class, 'issue'])->name('invoices.issue');
                 Route::post('invoices/{invoice}/cancel', [InvoiceController::class, 'cancel'])->name('invoices.cancel');
                 Route::post('invoices/{invoice}/payments', [InvoiceController::class, 'recordPayment'])->name('invoices.payments.store');
@@ -315,6 +320,13 @@ Route::middleware(['auth', 'active'])->group(function () {
                     Route::get('plans', [AdminController::class, 'plans'])->name('plans');
                     Route::post('plans', [AdminController::class, 'storePlan'])->name('plans.store');
                     Route::post('plans/{plan}/toggle', [AdminController::class, 'togglePlan'])->name('plans.toggle');
+                });
+                Route::middleware('pn.can:platform.tenants.close')->group(function () {
+                    Route::get('offboarding', [OffboardingController::class, 'index'])->name('offboarding.index');
+                    Route::get('tenants/{tenant}/offboarding', [OffboardingController::class, 'create'])->name('offboarding.create');
+                    Route::post('tenants/{tenant}/offboarding', [OffboardingController::class, 'store'])->name('offboarding.store');
+                    Route::get('offboarding/{offboarding}', [OffboardingController::class, 'show'])->name('offboarding.show');
+                    Route::post('offboarding/{offboarding}', [OffboardingController::class, 'act'])->name('offboarding.act');
                 });
                 Route::middleware('pn.can:platform.staff_roles.assign|platform.superadmin.propose|platform.superadmin.approve')->group(function () {
                     Route::get('team', [StaffTeamController::class, 'index'])->name('team');

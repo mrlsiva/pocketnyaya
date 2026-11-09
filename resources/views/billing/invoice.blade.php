@@ -170,7 +170,7 @@
                         <div class="d-flex justify-content-between small py-1 border-bottom">
                             <span>{{ \Illuminate\Support\Carbon::parse($payment->payment_date)->format('d M Y') }} · {{ str_replace('_', ' ', $payment->method) }} · {{ $money::format($payment->amount) }}
                                 @if ($payment->status !== 'recorded')<span class="badge text-bg-secondary">{{ $payment->status }}</span>@endif</span>
-                            @if ($canReverse && $payment->status === 'recorded')
+                            @if ($canReverse && $payment->status === 'recorded' && $payment->method !== 'credit_note')
                                 <form method="post" action="{{ route('practice.payments.reverse', $payment->id) }}">@csrf<button class="btn btn-link btn-sm p-0" type="submit">Reverse</button></form>
                             @endif
                         </div>
@@ -191,6 +191,29 @@
                         <input class="form-control form-control-sm mb-2" name="reference_number" placeholder="Reference (optional)" aria-label="Reference">
                         <button class="btn btn-primary btn-sm" type="submit">Record</button>
                     </form>
+                </div></div>
+            @endif
+
+            @if ($original)
+                <div class="alert alert-info small d-print-none">Credit note against <a href="{{ route('practice.invoices.show', $original->id) }}">{{ $original->invoice_number }}</a>. It reduced that invoice's balance and can't be reversed.</div>
+            @endif
+            @if ($creditNotes->isNotEmpty())
+                <div class="card shadow-sm mb-3 d-print-none"><div class="card-body">
+                    <h2 class="h6">Credit notes</h2>
+                    @foreach ($creditNotes as $note)
+                        <div class="small"><a href="{{ route('practice.invoices.show', $note->id) }}">{{ $note->invoice_number }}</a> · {{ $money::format($note->total_amount) }}</div>
+                    @endforeach
+                </div></div>
+            @endif
+            @if ($canCredit)
+                <div class="card shadow-sm mb-3 d-print-none"><div class="card-body">
+                    <h2 class="h6">Issue a credit note</h2>
+                    <form method="post" action="{{ route('practice.invoices.credit', $invoice) }}">@csrf
+                        <input class="form-control form-control-sm mb-2" name="amount" placeholder="Amount to credit, tax included" required aria-label="Amount to credit">
+                        <input class="form-control form-control-sm mb-2" name="reason" placeholder="Reason" required aria-label="Reason">
+                        <button class="btn btn-outline-primary btn-sm" type="submit">Issue credit note</button>
+                    </form>
+                    <p class="small text-body-secondary mt-2 mb-0">Reduces this invoice's balance, with tax reversed in proportion. It can't be undone. Have your accountant review this treatment.</p>
                 </div></div>
             @endif
 

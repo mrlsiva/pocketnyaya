@@ -20,6 +20,9 @@ return [
     // Provisional. Counsel must confirm the response period for privacy requests.
     'privacy_request_days' => 30,
 
+    // Closing a practice. Placeholder until counsel confirms how long the export stays open.
+    'offboarding_export_days' => 30,
+
     // Development key files sit outside the web root. Production uses a KMS (C7).
     'document_key_dir' => env('DOCUMENT_KEY_DIR', storage_path('app/private/keys')),
     'document_storage_region' => env('DOCUMENT_STORAGE_REGION', 'local-dev'),

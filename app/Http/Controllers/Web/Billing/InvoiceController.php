@@ -76,9 +76,13 @@ class InvoiceController extends Controller
             'redacted' => $redacted,
             'canEdit' => $canEdit,
             'canIssue' => BillingAccess::canEditInvoice($user, $invoice) && $invoice->status === 'draft' && AccessContext::tenantCan($user, 'billing.invoices.issue'),
-            'canCancel' => BillingAccess::canEditInvoice($user, $invoice) && in_array($invoice->status, ['issued', 'partially_paid'], true) && AccessContext::tenantCan($user, 'billing.invoices.cancel'),
-            'canPay' => in_array($invoice->status, ['issued', 'partially_paid'], true) && AccessContext::tenantCan($user, 'billing.payments.record'),
+            'canCancel' => $invoice->invoice_type !== 'credit_note' && BillingAccess::canEditInvoice($user, $invoice) && in_array($invoice->status, ['issued', 'partially_paid'], true) && AccessContext::tenantCan($user, 'billing.invoices.cancel'),
+            'canPay' => $invoice->invoice_type !== 'credit_note' && in_array($invoice->status, ['issued', 'partially_paid'], true) && AccessContext::tenantCan($user, 'billing.payments.record'),
             'canReverse' => AccessContext::tenantCan($user, 'billing.payments.reverse'),
+            'canCredit' => $invoice->invoice_type !== 'credit_note' && BillingAccess::canEditInvoice($user, $invoice)
+                && in_array($invoice->status, ['issued', 'partially_paid'], true) && AccessContext::tenantCan($user, 'billing.invoices.issue'),
+            'original' => $invoice->original_invoice_id === null ? null : Invoice::query()->find($invoice->original_invoice_id, ['id', 'invoice_number']),
+            'creditNotes' => Invoice::query()->where(['original_invoice_id' => $invoice->id, 'invoice_type' => 'credit_note'])->get(['id', 'invoice_number', 'total_amount']),
             'payments' => DB::table('payment_allocations as a')->join('payments as p', 'p.id', '=', 'a.payment_id')
                 ->where('a.invoice_id', $invoice->id)->orderBy('p.payment_date')
                 ->get(['p.id', 'p.payment_date', 'p.method', 'p.reference_number', 'p.status', 'a.amount', 'a.tds_amount']),
@@ -167,6 +171,21 @@ class InvoiceController extends Controller
         return back()->with('status', 'Retainer added.');
     }
 
+    /** A credit note against this invoice. Provisional treatment, pending a CA's review. */
+    public function creditNote(Request $request, Invoice $invoice, InvoiceService $invoices): RedirectResponse
+    {
+        $user = $this->user($request);
+        abort_unless(BillingAccess::canViewInvoice($user, $invoice), 404);
+        abort_unless(AccessContext::tenantCan($user, 'billing.invoices.issue') && BillingAccess::canEditInvoice($user, $invoice), 403);
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'gt:0', 'max:999999999999', 'decimal:0,2'],
+            'reason' => ['required', 'string', 'max:500'],
+        ]);
+        $note = $invoices->issueCreditNote($invoice, $user, (string) $data['amount'], $data['reason']);
+
+        return redirect()->route('practice.invoices.show', $note)->with('status', "Credit note {$note->invoice_number} issued.");
+    }
+
     /** Private download only. Drafts have no number, and redacted viewers get no copy. */
     public function pdf(Request $request, Invoice $invoice, InvoiceService $invoices): Response
     {
@@ -238,7 +257,12 @@ class InvoiceController extends Controller
     {
         $tenant = AccessContext::currentTenantId();
         $sums = DB::table('invoices')->where('tenant_id', $tenant)->whereNull('deleted_at')->whereIn('status', ['issued', 'partially_paid', 'paid'])
-            ->selectRaw('COALESCE(SUM(subtotal),0) fees, COALESCE(SUM(cgst_amount+sgst_amount),0) intra_tax, COALESCE(SUM(igst_amount),0) inter_tax, COALESCE(SUM(amount_paid),0) received, COALESCE(SUM(balance_due),0) outstanding')->first();
+            // Credit notes count against fees and tax, and the credit they apply isn't money received.
+            ->selectRaw("COALESCE(SUM(CASE WHEN invoice_type = 'credit_note' THEN -subtotal ELSE subtotal END),0) fees,
+                COALESCE(SUM(CASE WHEN invoice_type = 'credit_note' THEN -(cgst_amount+sgst_amount) ELSE cgst_amount+sgst_amount END),0) intra_tax,
+                COALESCE(SUM(CASE WHEN invoice_type = 'credit_note' THEN -igst_amount ELSE igst_amount END),0) inter_tax,
+                COALESCE(SUM(CASE WHEN invoice_type = 'credit_note' THEN -total_amount ELSE amount_paid END),0) received,
+                COALESCE(SUM(balance_due),0) outstanding")->first();
 
         $today = now()->toDateString();
         $ageing = DB::table('invoices')->where('tenant_id', $tenant)->whereNull('deleted_at')->whereIn('status', ['issued', 'partially_paid'])

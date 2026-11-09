@@ -17,7 +17,7 @@
                     <tbody>
                         @forelse ($invoices as $invoice)
                             <tr>
-                                <td><a href="{{ route('practice.invoices.show', $invoice) }}">{{ $invoice->invoice_number ?? 'Draft' }}</a></td>
+                                <td><a href="{{ route('practice.invoices.show', $invoice) }}">{{ $invoice->invoice_number ?? 'Draft' }}</a>@if ($invoice->invoice_type === 'credit_note') <span class="badge text-bg-info">Credit note</span>@endif</td>
                                 <td>{{ $invoice->client?->name }}</td>
                                 <td class="text-capitalize">{{ str_replace('_', ' ', $invoice->status) }}</td>
                                 <td class="text-end text-nowrap">{{ \App\Support\Money::format($invoice->total_amount) }}</td>
