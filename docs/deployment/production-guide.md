@@ -68,6 +68,8 @@ Values are set on the server only, never committed, and never pasted into chat o
 - **Queue worker** under Supervisor: `php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600`, with 2 processes, restarted on every deploy with `php artisan queue:restart`.
 - **Scheduler**, from cron every minute: `* * * * * cd /var/www/pocketnyaya/current && php artisan schedule:run >> /dev/null 2>&1`. It runs the daily audit digest at 00:30 and the retention dry run at 01:00, both India time.
 
+- **Real-time server** under Supervisor: `php artisan reverb:start --host=127.0.0.1 --port=8080`, restarted on every deploy with `php artisan reverb:restart`. Nginx proxies `wss://` traffic on a path or subdomain to it, with `Upgrade` and `Connection` headers passed through. Set `REVERB_HOST`, `REVERB_PORT=443` and `REVERB_SCHEME=https` to the public address, and generate new `REVERB_APP_KEY` and `REVERB_APP_SECRET` values for production. If it stops, the app keeps working and screens just need a manual refresh.
+
 ## 6. Storage permissions
 
 - `storage/` and `bootstrap/cache/` are writable by the PHP user. All other files are read-only to it.

@@ -79,6 +79,8 @@ The column is `DATETIME(6) NULL` on both tables, following the approved `timesta
 | T3 tables | Read through join views. `pn_app` may INSERT but not read the base tables | The T3 write procedures aren't built |
 | Audit and access logs | `pn_app` can SELECT and INSERT on the base tables | Staff and firm audit screens read them directly. Reads aren't isolated by the database |
 | `document_keys` | `pn_app` can read and write them | Decryption happens in PHP, not in a database procedure |
+| Real-time signals | `users.{id}` and `tenants.{id}.diary` private channels, ids only, sent after commit and best effort | PRD 2.3. Nothing depends on a signal arriving |
+| Allocation matrix and firm reports | Availability, practice areas and workload limits shown when allocating; hours, utilisation and fees by lead advocate per financial year | PRD 2.4. **Utilisation is billable time divided by recorded time, for review** |
 | Security headers | A content policy allowing scripts from this site only, plus frame, sniffing and referrer protection on every response | QA finding F-4 |
 
 ## MariaDB substitutions
@@ -106,7 +108,7 @@ Adapters exist for all of these, switched off (Staff → Integrations).
 - Aadhaar eSign and DSC. Settlements stop at recorded acceptance, unsigned
 - Video calls. "Create meeting link" explains that it isn't set up
 - Payment gateway. "Create payment link" explains that it isn't set up, and payments are recorded by hand
-- Real-time updates, push sending, SMS and live email
+- Push sending through Firebase, SMS and live email. Real-time updates in the browser and app use Laravel Reverb (built 2026-11-10)
 - Malware scanning. Files record `scan_status = skipped`
 - KMS and key escrow. `LocalKeyProvider` is development only, and losing its files loses the documents
 

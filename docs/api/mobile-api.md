@@ -154,6 +154,24 @@ Always label a settlement "Settlement agreement (unsigned)". Accepting records a
 | PUT | `/team/{userId}/role` | Change a member's role: `role` |
 | DELETE | `/team/{userId}` | Remove a member from this practice only. Their account and other practices are untouched |
 
+## Real-time updates
+
+The app can listen for small signals instead of polling. They use Laravel Reverb, which speaks the Pusher protocol, so any Pusher-compatible Flutter client works.
+
+| Setting | Value |
+|---|---|
+| Host, port, scheme | From the server's `REVERB_HOST`, `REVERB_PORT` and `REVERB_SCHEME` |
+| App key | `REVERB_APP_KEY`. It's public, unlike the secret |
+| Channel sign-in | `POST /api/v1/broadcasting/auth` with the bearer token, `channel_name` and `socket_id` |
+| Event name | `update` |
+
+| Channel | Who may join | Signal `type` values |
+|---|---|---|
+| `private-users.{yourUserId}` | Only you | `matter.assigned`, `task.assigned`, `consultation.message`, `odr.message` |
+| `private-tenants.{tenantId}.diary` | Firm members who may see hearings | `hearing.scheduled`, `hearing.outcome`, `diary.conflict` |
+
+Each signal carries ids only, such as `{"type": "task.assigned", "data": {"task_id": "...", "matter_id": "..."}}`. Fetch the details through the normal endpoints. Signals are best effort, so refresh on app resume too. **Push notifications through Firebase aren't sent yet**, because they need a Firebase account.
+
 ## Rules for the app
 
 - **Don't store the token in plain storage.** Use the platform's secure storage.
