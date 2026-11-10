@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Schema\ColumnDefinition;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
@@ -56,6 +57,9 @@ class AppServiceProvider extends ServiceProvider
         if (Isolation::enabled() && $this->app->runningInConsole() && ! $this->app->runningUnitTests()) {
             Isolation::usePlatform();
         }
+
+        // Real-time channel sign-in for the mobile app, with its bearer token (the web uses /broadcasting/auth).
+        Broadcast::routes(['prefix' => 'api/v1', 'middleware' => ['api', 'auth:sanctum', 'active']]);
 
         // The RBAC tables only accept model_type = 'user' (C26).
         Relation::enforceMorphMap(['user' => User::class]);

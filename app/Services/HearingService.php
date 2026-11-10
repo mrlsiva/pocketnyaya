@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Hearing;
 use App\Models\Matter;
+use App\Support\Realtime;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -25,7 +26,8 @@ class HearingService
                     'created_at' => now(), 'updated_at' => now(),
                 ]);
             }
-            $this->detectConflicts($hearing);
+            $conflicts = $this->detectConflicts($hearing);
+            Realtime::toTenantDiary($matter->tenant_id, $conflicts > 0 ? 'diary.conflict' : 'hearing.scheduled', ['hearing_id' => $hearing->id, 'matter_id' => $matter->id]);
 
             return $hearing;
         });
@@ -56,6 +58,7 @@ class HearingService
                 'next_hearing_date' => $data['next_hearing_date'] ?? null,
                 'next_hearing_id' => $next?->id,
             ])->save();
+            Realtime::toTenantDiary($hearing->tenant_id, 'hearing.outcome', ['hearing_id' => $hearing->id, 'matter_id' => $hearing->matter_id]);
 
             return $hearing;
         });

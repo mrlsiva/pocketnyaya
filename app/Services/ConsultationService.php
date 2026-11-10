@@ -9,6 +9,7 @@ use App\Models\ConsultationRequest;
 use App\Models\Matter;
 use App\Models\User;
 use App\Support\AccessContext;
+use App\Support\Realtime;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -63,6 +64,14 @@ class ConsultationService
 
         $message = new ConsultationMessage(['body' => $body]);
         $message->forceFill(['consultation_request_id' => $consultation->id, 'sender_user_id' => $sender->id])->save();
+
+        // Tell the other side: the customer, or the advocate the consultation is assigned to.
+        $advocate = $consultation->advocate_membership_id === null ? null : (string) DB::table('tenant_memberships')->where('id', $consultation->advocate_membership_id)->value('user_id');
+        foreach (array_filter([$consultation->customer_user_id, $advocate]) as $recipient) {
+            if ($recipient !== $sender->id) {
+                Realtime::toUser($recipient, 'consultation.message', ['consultation_id' => $consultation->id]);
+            }
+        }
 
         return $message;
     }

@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Notifications\OdrInvitationNotification;
 use App\Services\Documents\DocumentService;
 use App\Support\AccessContext;
+use App\Support\Realtime;
 use App\Support\SimplePdf;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -228,8 +229,23 @@ class OdrService
             'tone_check' => $toneOnly === [] ? null : array_values($toneOnly),
             'content_hash' => hash('sha256', $body),
         ])->save();
+        $this->signalMessage($dispute, $sender, $privateWith);
 
         return $message;
+    }
+
+    /** Real-time signal to everyone who can read the message, except its sender. Ids only. */
+    private function signalMessage(OdrDispute $dispute, ?OdrParticipant $sender, ?string $privateWith): void
+    {
+        $participants = OdrParticipant::query()->where(['dispute_id' => $dispute->id, 'status' => 'joined'])
+            ->when($privateWith !== null, fn ($q) => $q->whereKey($privateWith))->pluck('user_id')->all();
+        $mediators = DB::table('odr_mediator_assignments as a')->join('mediator_profiles as m', 'm.id', '=', 'a.mediator_profile_id')
+            ->where(['a.dispute_id' => $dispute->id, 'a.status' => 'accepted'])->pluck('m.user_id')->all();
+        foreach (array_unique(array_filter(array_merge($participants, $mediators))) as $userId) {
+            if ($userId !== $sender?->user_id) {
+                Realtime::toUser((string) $userId, 'odr.message', ['dispute_id' => $dispute->id]);
+            }
+        }
     }
 
     public function addEvidence(OdrDispute $dispute, User $user, ?OdrParticipant $sender, ?string $mediatorProfileId, UploadedFile $file, string $title, ?string $privateWith = null): OdrMessage

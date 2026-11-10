@@ -95,7 +95,8 @@ class IsolationModeTest extends PracticeTestCase
         $this->inTenant($this->partner, $this->firm);
         foreach (['/practice', '/practice/matters', '/practice/clients', '/practice/invoices', '/practice/documents', '/practice/team', '/practice/fees',
             '/practice/time', '/practice/diary', '/practice/calendar', '/practice/settings', '/practice/retainers', '/practice/reports', '/practice/knowledge',
-            '/practice/consultations', '/practice/audit', '/practice/matters/new', '/practice/clients/new', '/workspaces', '/profile'] as $url) {
+            '/practice/consultations', '/practice/audit', '/practice/matters/new', '/practice/clients/new', '/workspaces', '/profile',
+            '/practice/matters/'.DB::connection('platform')->table('matters')->where('tenant_id', $this->firm)->value('id')] as $url) {
             $this->assertLessThan(500, $this->get($url)->status(), "{$url} failed in isolation mode");
         }
         $this->get('/practice/matters')->assertOk()->assertSee('Visible Matter')->assertDontSee('Hidden Matter');

@@ -4,6 +4,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@yield('title', config('app.name'))</title>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    @auth
+        {{-- Real-time: which private channels this page may listen on. Ids only; the server checks access again. --}}
+        <meta name="pn-user" content="{{ auth()->id() }}">
+        @if (request()->attributes->get('pn_context') === 'tenant' && \App\Support\AccessContext::tenantCan(auth()->user(), 'hearings.view'))
+            <meta name="pn-tenant" content="{{ \App\Support\AccessContext::currentTenantId() }}">
+        @endif
+    @endauth
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="d-flex flex-column min-vh-100 bg-body-tertiary">
@@ -36,6 +44,10 @@
 
     <main class="container py-4 flex-grow-1">
         @include('partials.alerts')
+        <div class="alert alert-info d-none d-flex justify-content-between align-items-center gap-2" id="pn-live" role="status" aria-live="polite">
+            <span id="pn-live-text">Something was updated.</span>
+            <button class="btn btn-sm btn-outline-primary" type="button" data-reload>Refresh</button>
+        </div>
         @yield('content')
     </main>
 

@@ -31,7 +31,10 @@ class FirmReports
         return DB::table('time_entries as t')->join('tenant_memberships as m', 'm.id', '=', 't.membership_id')->join('users as u', 'u.id', '=', 'm.user_id')
             ->where('t.tenant_id', $tenantId)->whereNull('t.deleted_at')->whereBetween('t.work_date', [$from->toDateString(), $to->toDateString()])
             ->groupBy('t.membership_id', 'u.name')->orderBy('u.name')
-            ->selectRaw("u.name, SUM(t.minutes) total, SUM(CASE WHEN t.is_billable = 1 THEN t.minutes ELSE 0 END) billable, SUM(CASE WHEN t.status = 'billed' THEN t.minutes ELSE 0 END) billed")
+            // Column names go through the grammar, so the isolation table prefix applies to them too.
+            ->select('u.name')
+            ->selectRaw(sprintf("SUM(%s) total, SUM(CASE WHEN %s = 1 THEN %1\$s ELSE 0 END) billable, SUM(CASE WHEN %s = 'billed' THEN %1\$s ELSE 0 END) billed",
+                DB::getQueryGrammar()->wrap('t.minutes'), DB::getQueryGrammar()->wrap('t.is_billable'), DB::getQueryGrammar()->wrap('t.status')))
             ->get()->map(fn ($r) => (object) [
                 'name' => $r->name, 'total_minutes' => (int) $r->total, 'billable_minutes' => (int) $r->billable, 'billed_minutes' => (int) $r->billed,
                 // Share of recorded time that is billable, as a whole percentage.

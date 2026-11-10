@@ -25,7 +25,7 @@ class SecurityHeaders
         if (! $headers->has('Content-Security-Policy')) {
             $headers->set('Content-Security-Policy', implode('; ', [
                 "default-src 'self'", "script-src 'self'", "style-src 'self' 'unsafe-inline'", "img-src 'self' data:",
-                "font-src 'self' data:", "connect-src 'self'", "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
+                "font-src 'self' data:", 'connect-src '.$this->connectSources(), "object-src 'none'", "base-uri 'self'", "form-action 'self'", "frame-ancestors 'none'",
             ]));
         }
         if ($request->isSecure()) {
@@ -33,5 +33,21 @@ class SecurityHeaders
         }
 
         return $response;
+    }
+
+    /** This site, plus the Reverb WebSocket address when real-time updates are on. */
+    private function connectSources(): string
+    {
+        $sources = ["'self'"];
+        if (config('broadcasting.default') === 'reverb') {
+            $options = (array) config('broadcasting.connections.reverb.options', []);
+            $secure = ($options['scheme'] ?? 'https') === 'https';
+            $host = (string) ($options['host'] ?? '');
+            if ($host !== '') {
+                $sources[] = ($secure ? 'wss://' : 'ws://').$host.':'.(int) ($options['port'] ?? ($secure ? 443 : 80));
+            }
+        }
+
+        return implode(' ', $sources);
     }
 }

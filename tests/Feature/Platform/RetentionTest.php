@@ -50,7 +50,9 @@ class RetentionTest extends PracticeTestCase
 
     private function rule(string $category, string $action, int $months = 12, string $trigger = 'tenant_closure'): RetentionRule
     {
-        $rule = new RetentionRule(['data_category' => $category, 'version' => random_int(1, 100000), 'retention_months' => $months, 'trigger_event' => $trigger, 'on_expiry' => $action, 'on_erasure_request' => 'retain', 'legal_basis_note' => 'Synthetic']);
+        // Each new rule is the next version of its category, as the drafting screen does.
+        $version = (int) RetentionRule::query()->where('data_category', $category)->max('version') + 1;
+        $rule = new RetentionRule(['data_category' => $category, 'version' => $version, 'retention_months' => $months, 'trigger_event' => $trigger, 'on_expiry' => $action, 'on_erasure_request' => 'retain', 'legal_basis_note' => 'Synthetic']);
         $rule->forceFill(['status' => 'approved', 'drafted_by' => User::factory()->create()->id, 'approved_by' => User::factory()->create()->id, 'approved_at' => now()])->save();
 
         return $rule;

@@ -6,6 +6,7 @@ use App\Models\Matter;
 use App\Models\User;
 use App\Support\AccessContext;
 use App\Support\MatterAccess;
+use App\Support\Realtime;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -66,6 +67,8 @@ class MatterService
             if ($matter->status === 'unallocated') {
                 $matter->forceFill(['status' => 'open'])->save();
             }
+            $assignee = (string) DB::table('tenant_memberships')->where('id', $membershipId)->value('user_id');
+            Realtime::toUser($assignee, 'matter.assigned', ['matter_id' => $matter->id, 'role' => $role]);
         });
     }
 

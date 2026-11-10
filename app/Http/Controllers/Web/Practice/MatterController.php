@@ -16,6 +16,7 @@ use App\Services\AllocationService;
 use App\Services\MatterService;
 use App\Support\AccessContext;
 use App\Support\MatterAccess;
+use App\Support\Realtime;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -196,6 +197,9 @@ class MatterController extends Controller
 
         $task = new MatterTask($data);
         $task->forceFill(['tenant_id' => $matter->tenant_id, 'matter_id' => $matter->id, 'assigned_by' => $user->id])->save();
+        if ($task->assigned_to_membership_id !== null) {
+            Realtime::toUser((string) DB::table('tenant_memberships')->where('id', $task->assigned_to_membership_id)->value('user_id'), 'task.assigned', ['task_id' => $task->id, 'matter_id' => $matter->id]);
+        }
 
         return back()->with('status', 'Task added.');
     }

@@ -27,7 +27,8 @@ class AllocationService
             ->whereIn('a.membership_id', $ids)->get(['a.membership_id', 'a.practice_area_id', 'p.name'])->groupBy('membership_id');
         $loads = DB::table('matter_assignments as a')->join('matters as x', 'x.id', '=', 'a.matter_id')
             ->whereIn('a.membership_id', $ids)->whereNull('a.unassigned_at')->whereNull('x.deleted_at')->whereNotIn('x.status', ['closed', 'archived'])
-            ->groupBy('a.membership_id')->selectRaw('a.membership_id, COUNT(DISTINCT a.matter_id) c')->pluck('c', 'membership_id');
+            // Column names go through the grammar, so the isolation table prefix applies to them too.
+            ->groupBy('a.membership_id')->select('a.membership_id')->selectRaw('COUNT(DISTINCT '.DB::getQueryGrammar()->wrap('a.matter_id').') c')->pluck('c', 'membership_id');
         $away = DB::table('membership_availability')->whereIn('membership_id', $ids)->where('starts_on', '<=', $today)->where('ends_on', '>=', $today)
             ->orderBy('ends_on')->get(['membership_id', 'availability', 'ends_on'])->keyBy('membership_id');
         $roles = DB::table('model_has_roles as r')->join('roles', 'roles.id', '=', 'r.role_id')->where('r.team_id', $tenant)
