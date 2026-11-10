@@ -24,6 +24,12 @@
                                                 <button class="btn btn-outline-secondary btn-sm" type="submit">Add role</button>
                                             </form>
                                         @endif
+                                        @if ($canUpdateMembers)
+                                            <form class="d-flex gap-1" method="post" action="{{ route('practice.team.capacity', $member->user_id) }}">@csrf @method('put')
+                                                <input class="form-control form-control-sm" style="width: 6rem" name="max_active_matters" value="{{ $member->max_active_matters }}" placeholder="No limit" title="Most open matters at once" aria-label="Most open matters at once">
+                                                <button class="btn btn-outline-secondary btn-sm" type="submit">Set limit</button>
+                                            </form>
+                                        @endif
                                         @if ($canDeactivate)
                                             <form method="post" action="{{ route('practice.team.deactivate', $member->user_id) }}">@csrf @method('delete')
                                                 <button class="btn btn-outline-danger btn-sm" type="submit">Remove</button></form>

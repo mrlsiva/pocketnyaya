@@ -23,5 +23,41 @@
             </tbody>
         </table>
     </div></div>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-4 mb-2">
+        <h2 class="h5 mb-0">Financial year {{ $year }}–{{ substr((string) ($year + 1), -2) }}</h2>
+        <form method="get" class="d-flex gap-1"><input class="form-control form-control-sm" style="width: 6rem" name="fy" type="number" value="{{ $year }}" aria-label="Financial year starting"><button class="btn btn-outline-secondary btn-sm" type="submit">Show</button></form>
+    </div>
+    <div class="row g-3">
+        <div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-body">
+            <h3 class="h6">Billable hours</h3>
+            <div class="table-responsive"><table class="table table-sm small mb-0">
+                <thead><tr><th>Member</th><th class="text-end">Recorded</th><th class="text-end">Billable</th><th class="text-end">Billed</th><th class="text-end">Utilisation</th></tr></thead>
+                <tbody>
+                    @forelse ($hours as $row)
+                        <tr><td>{{ $row->name }}</td>
+                            @foreach ([$row->total_minutes, $row->billable_minutes, $row->billed_minutes] as $m)<td class="text-end text-nowrap">{{ intdiv($m, 60) }}h {{ $m % 60 }}m</td>@endforeach
+                            <td class="text-end">{{ $row->utilisation === null ? '—' : $row->utilisation.'%' }}</td></tr>
+                    @empty
+                        <tr><td colspan="5" class="text-body-secondary">No time recorded in this year.</td></tr>
+                    @endforelse
+                </tbody>
+            </table></div>
+            <p class="small text-body-secondary mt-2 mb-0">Utilisation is the share of recorded time that is billable.</p>
+        </div></div></div>
+        <div class="col-lg-6"><div class="card shadow-sm h-100"><div class="card-body">
+            <h3 class="h6">Fees by lead advocate</h3>
+            <div class="table-responsive"><table class="table table-sm small mb-0">
+                <thead><tr><th>Lead</th><th class="text-end">Invoices</th><th class="text-end">Fees billed</th><th class="text-end">Collected</th></tr></thead>
+                <tbody>
+                    @forelse ($leads as $row)
+                        <tr><td>{{ $row->lead }}</td><td class="text-end">{{ $row->invoices }}</td><td class="text-end text-nowrap">{{ $money::format($row->fees) }}</td><td class="text-end text-nowrap">{{ $money::format($row->collected) }}</td></tr>
+                    @empty
+                        <tr><td colspan="4" class="text-body-secondary">No invoices issued in this year.</td></tr>
+                    @endforelse
+                </tbody>
+            </table></div>
+            <p class="small text-body-secondary mt-2 mb-0">Fees exclude GST, and credit notes are deducted. Restricted matters you can't open are combined into one line.</p>
+        </div></div></div>
+    </div>
     <p class="small text-body-secondary mt-3">These figures help you manage the practice. They aren't a tax filing, so please have an accountant review them.</p>
 @endsection

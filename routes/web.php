@@ -283,6 +283,8 @@ Route::middleware(['auth', 'active'])->group(function () {
             Route::post('settings/branches', [SettingsController::class, 'storeBranch'])->middleware('pn.can:tenant.branches.manage')->name('settings.branches');
             Route::post('settings/groups', [SettingsController::class, 'storeGroup'])->middleware('pn.can:tenant.practice_groups.manage')->name('settings.groups');
             Route::post('settings/availability', [SettingsController::class, 'storeAvailability'])->middleware('pn.can:tenant.availability.manage_own')->name('settings.availability');
+            Route::post('settings/practice-areas', [SettingsController::class, 'storePracticeAreas'])->middleware('pn.can:tenant.availability.manage_own')->name('settings.areas');
+            Route::put('team/{member}/capacity', [TeamController::class, 'capacity'])->middleware('pn.can:tenant.members.update')->name('team.capacity');
 
             Route::get('diary', [DiaryController::class, 'index'])->name('diary.index');
             Route::post('diary', [DiaryController::class, 'storeEntry'])->name('diary.store');

@@ -37,6 +37,7 @@ class SettingsController extends Controller
             'canBranches' => AccessContext::tenantCan($user, 'tenant.branches.manage'),
             'canGroups' => AccessContext::tenantCan($user, 'tenant.practice_groups.manage'),
             'canAvailability' => AccessContext::tenantCan($user, 'tenant.availability.manage_own'),
+            'myAreas' => DB::table('membership_practice_areas')->where('membership_id', MatterAccess::me($user))->pluck('practice_area_id')->all(),
             // tenant.subscription.view: the plan and how much of it is used.
             'subscription' => AccessContext::tenantCan($user, 'tenant.subscription.view')
                 ? ['plan' => app(SubscriptionLimits::class)->currentPlan($tenant), 'usage' => app(SubscriptionLimits::class)->usage($tenant)] : null,
@@ -84,6 +85,28 @@ class SettingsController extends Controller
         DB::table('practice_groups')->insert($data + ['id' => (string) Str::uuid7(), 'tenant_id' => AccessContext::currentTenantId(), 'created_at' => now(), 'updated_at' => now()]);
 
         return back()->with('status', 'Practice group added.');
+    }
+
+    /** A member's own specialisations, used by the allocation matrix (PRD 2.4). */
+    public function storePracticeAreas(Request $request): RedirectResponse
+    {
+        abort_unless(AccessContext::tenantCan($this->user($request), 'tenant.availability.manage_own'), 403);
+        $data = $request->validate(['practice_area_ids' => ['nullable', 'array', 'max:20'], 'practice_area_ids.*' => ['integer', 'exists:practice_areas,id']]);
+        $this->syncAreas((string) MatterAccess::me($this->user($request)), array_values(array_unique(array_map('intval', $data['practice_area_ids'] ?? []))));
+
+        return back()->with('status', 'Your practice areas are saved.');
+    }
+
+    /** @param  list<int>  $areas */
+    public static function syncAreas(string $membershipId, array $areas): void
+    {
+        $tenant = AccessContext::currentTenantId();
+        DB::transaction(function () use ($membershipId, $areas, $tenant) {
+            DB::table('membership_practice_areas')->where(['membership_id' => $membershipId, 'tenant_id' => $tenant])->delete();
+            foreach ($areas as $area) {
+                DB::table('membership_practice_areas')->insert(['membership_id' => $membershipId, 'tenant_id' => $tenant, 'practice_area_id' => $area, 'created_at' => now(), 'updated_at' => now()]);
+            }
+        });
     }
 
     public function storeAvailability(Request $request): RedirectResponse

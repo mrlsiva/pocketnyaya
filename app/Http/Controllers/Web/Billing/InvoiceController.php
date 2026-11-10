@@ -15,6 +15,7 @@ use App\Models\Payment;
 use App\Models\TimeEntry;
 use App\Models\User;
 use App\Services\AuditLogWriter;
+use App\Services\Billing\FirmReports;
 use App\Services\Billing\InvoiceService;
 use App\Support\AccessContext;
 use App\Support\BillingAccess;
@@ -22,6 +23,7 @@ use App\Support\Money;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -284,7 +286,18 @@ class InvoiceController extends Controller
                 COALESCE(SUM(CASE WHEN DATEDIFF(?, due_date) BETWEEN 31 AND 90 THEN balance_due END),0) d90,
                 COALESCE(SUM(CASE WHEN DATEDIFF(?, due_date) > 90 THEN balance_due END),0) older', [$today, $today, $today, $today, $today])->first();
 
-        return view('billing.reports', ['sums' => $sums, 'ageing' => $ageing, 'money' => Money::class]);
+        // PRD 2.4: billable hours and partner revenue, for one Indian financial year (April to March).
+        $year = (int) $request->query('fy', (string) FirmReports::financialYear()[0]->year);
+        abort_if($year < 2000 || $year > 2100, 404);
+        [$from, $to] = FirmReports::financialYear(Carbon::create($year, 4, 1));
+        $reports = app(FirmReports::class);
+
+        return view('billing.reports', [
+            'sums' => $sums, 'ageing' => $ageing, 'money' => Money::class,
+            'year' => $year, 'from' => $from, 'to' => $to,
+            'hours' => $reports->hoursByMember((string) $tenant, $from, $to),
+            'leads' => $reports->revenueByLead($this->user($request), (string) $tenant, $from, $to),
+        ]);
     }
 
     private function user(Request $request): User

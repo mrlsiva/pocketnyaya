@@ -86,6 +86,16 @@
                         <button class="btn btn-outline-primary btn-sm" type="submit">Save</button>
                     </form>
                 </div></div>
+                <div class="card shadow-sm mt-3"><div class="card-body">
+                    <h2 class="h6">My practice areas</h2>
+                    <p class="small text-body-secondary">Partners see these when allocating matters. They are never shown publicly.</p>
+                    <form method="post" action="{{ route('practice.settings.areas') }}">@csrf
+                        <select class="form-select form-select-sm mb-2" name="practice_area_ids[]" multiple size="6" aria-label="Practice areas">
+                            @foreach ($areas as $area)<option value="{{ $area->id }}" @selected(in_array($area->id, $myAreas))>{{ $area->name }}</option>@endforeach
+                        </select>
+                        <button class="btn btn-outline-primary btn-sm" type="submit">Save areas</button>
+                    </form>
+                </div></div>
             @endif
         </div>
     </div>

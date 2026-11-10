@@ -12,6 +12,7 @@ use App\Models\MatterNote;
 use App\Models\MatterTask;
 use App\Models\User;
 use App\Policies\MatterPolicy;
+use App\Services\AllocationService;
 use App\Services\MatterService;
 use App\Support\AccessContext;
 use App\Support\MatterAccess;
@@ -67,9 +68,8 @@ class MatterController extends Controller
         /** @var User $user */
         $user = $request->user();
 
-        $members = DB::table('tenant_memberships as m')->join('users as u', 'u.id', '=', 'm.user_id')
-            ->where('m.tenant_id', $matter->tenant_id)->where('m.status', 'active')->whereNull('m.deleted_at')
-            ->orderBy('u.name')->get(['m.id', 'u.name']);
+        // PRD 2.4 allocation matrix: availability, practice area and load for each member.
+        $members = app(AllocationService::class)->candidates($matter);
 
         return view('practice.matters.show', [
             'matter' => $matter->load(['client', 'court', 'parties']),

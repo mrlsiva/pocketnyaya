@@ -22,7 +22,7 @@ class TeamController extends Controller
 
         $members = DB::table('tenant_memberships as m')->join('users as u', 'u.id', '=', 'm.user_id')
             ->where('m.tenant_id', $tenant)->where('m.status', 'active')->whereNull('m.deleted_at')
-            ->orderBy('u.name')->get(['m.id', 'm.user_id', 'm.designation', 'u.name', 'u.email'])
+            ->orderBy('u.name')->get(['m.id', 'm.user_id', 'm.designation', 'm.max_active_matters', 'u.name', 'u.email'])
             ->map(function ($member) use ($tenant) {
                 $member->roles = DB::table('model_has_roles as r')->join('roles', 'roles.id', '=', 'r.role_id')
                     ->where(['r.team_id' => $tenant, 'r.model_id' => $member->user_id])->pluck('roles.name')->implode(', ');
@@ -40,6 +40,7 @@ class TeamController extends Controller
             'grantable' => $grantable,
             'canInvite' => AccessContext::tenantCan($user, 'tenant.members.invite'),
             'canDeactivate' => AccessContext::tenantCan($user, 'tenant.members.deactivate'),
+            'canUpdateMembers' => AccessContext::tenantCan($user, 'tenant.members.update'),
             'invitations' => AccessContext::tenantCan($user, 'tenant.members.invite')
                 ? DB::table('tenant_invitations')->where('tenant_id', $tenant)->whereNotNull('pending_email')->where('expires_at', '>', now())->get(['id', 'email', 'role_name', 'expires_at'])
                 : collect(),
@@ -75,6 +76,18 @@ class TeamController extends Controller
         $team->assignRole($user, (string) AccessContext::currentTenantId(), $member, $data['role']);
 
         return back()->with('status', 'Role updated.');
+    }
+
+    /** How many open matters this member may carry, shown in the allocation matrix. Empty means no limit. */
+    public function capacity(Request $request, User $member): RedirectResponse
+    {
+        $tenant = AccessContext::currentTenantId();
+        abort_unless(AccessContext::isActiveMember($member, $tenant), 404);
+        $data = $request->validate(['max_active_matters' => ['nullable', 'integer', 'min:0', 'max:1000']]);
+        DB::table('tenant_memberships')->where(['tenant_id' => $tenant, 'user_id' => $member->id])
+            ->update(['max_active_matters' => $data['max_active_matters'] ?? null, 'updated_at' => now()]);
+
+        return back()->with('status', 'Workload limit saved.');
     }
 
     public function deactivate(Request $request, User $member, TeamService $team): RedirectResponse

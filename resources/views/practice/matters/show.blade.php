@@ -134,10 +134,26 @@
                     @endforelse
                 </ul>
                 @can('allocate', $matter)
+                    <details class="mb-2"><summary class="small">Allocation matrix: who is free and suited</summary>
+                        <div class="table-responsive"><table class="table table-sm small mb-0 mt-1">
+                            <thead><tr><th>Member</th><th>Today</th><th>Open matters</th><th>Areas</th></tr></thead>
+                            <tbody>
+                                @foreach ($members as $member)
+                                    <tr class="{{ $member->availability !== 'available' || $member->at_capacity ? 'text-body-secondary' : '' }}">
+                                        <td>{{ $member->name }}<div class="text-body-secondary">{{ implode(', ', $member->roles) }}</div></td>
+                                        <td class="text-capitalize">{{ $member->availability === 'leave' ? 'On leave' : $member->availability }}@if ($member->unavailable_until) <div class="text-body-secondary">until {{ \Illuminate\Support\Carbon::parse($member->unavailable_until)->format('d M') }}</div>@endif</td>
+                                        <td>{{ $member->active_matters }}{{ $member->max_active_matters !== null ? ' of '.$member->max_active_matters : '' }}@if ($member->at_capacity) <span class="badge text-bg-warning">Full</span>@endif</td>
+                                        <td>@if ($member->matches_area)<span class="badge text-bg-success">Matches</span> @endif{{ implode(', ', $member->areas) ?: '—' }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table></div>
+                        <div class="form-text">Sorted by availability, capacity, matching practice area, then current load. The choice stays with you.</div>
+                    </details>
                     <form class="row g-2" method="post" action="{{ route('practice.matters.assign', $matter) }}">@csrf
                         <div class="col-7"><select class="form-select form-select-sm" name="membership_id" required aria-label="Team member">
                             <option value="">Person…</option>
-                            @foreach ($members as $member)<option value="{{ $member->id }}">{{ $member->name }}</option>@endforeach
+                            @foreach ($members as $member)<option value="{{ $member->id }}">{{ $member->name }}{{ $member->availability !== 'available' ? ' (away)' : '' }}{{ $member->at_capacity ? ' (full)' : '' }}{{ $member->matches_area ? ' · area match' : '' }}</option>@endforeach
                         </select></div>
                         <div class="col-5"><select class="form-select form-select-sm" name="role_on_matter" aria-label="Role on matter">
                             <option value="lead">Lead</option><option value="associate">Associate</option><option value="junior">Junior</option><option value="clerk">Clerk</option>
