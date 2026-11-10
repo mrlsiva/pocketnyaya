@@ -25,6 +25,7 @@ Personal endpoints need no extra header. For practice endpoints, marked **T** be
 | 410 | The file has been permanently erased |
 | 422 | Validation failed, or the record's status doesn't allow this |
 | 429 | Too many attempts |
+| 502 | An outside service is set up but failed or refused this request. The body names it in `integration` |
 | 503 | An outside service (payments, video, eSign and so on) isn't set up yet. The body names it in `integration` |
 
 ## Endpoints
@@ -122,7 +123,7 @@ Always label a settlement "Settlement agreement (unsigned)". Accepting records a
 | GET | `/odr/assignments` | Disputes proposed to me |
 | POST | `/odr/assignments/{id}` | `decision: accept` or `decline`, with a required `conflict_disclosure` |
 | POST | `/odr/disputes/{id}/messages` | With `private_with: <participant id>` to open or continue a private conversation |
-| POST | `/odr/disputes/{id}/sessions` | Schedule: `scheduled_at`, `duration_minutes`, `mode` (`video`, `audio`, `in_person`). No meeting link yet |
+| POST | `/odr/disputes/{id}/sessions` | Schedule: `scheduled_at`, `duration_minutes`, `mode` (`video`, `audio`, `in_person`). The mediator creates the video link on the web; it comes back as `meeting_ref`, an `https://` address, once the video service is on |
 | PUT | `/odr/disputes/{id}/sessions/{sessionId}` | `status: held`, `cancelled` or `no_show`, with an optional `summary` |
 | POST | `/odr/disputes/{id}/settlements` | Generate the unsigned agreement from a reviewed template (`template_id`, `terms`). Templates are listed in the dispute detail |
 | POST | `/odr/disputes/{id}/settlements/{settlementId}/void` | Withdraw a settlement no one has fully accepted |

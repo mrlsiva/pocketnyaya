@@ -16,12 +16,16 @@ class IntegrationRegistry
     ];
 
     /**
-     * Real drivers, by service and driver name. Empty until a provider's access, cost, data
-     * location and legal terms are approved; any other name in .env falls back to switched off.
+     * Real drivers, by service and driver name. Built on 2026-11-10 for the owner's chosen providers. Each stays switched off until
+     * its name and credentials are set in .env; any other name falls back to switched off.
      *
      * @var array<string, array<string, class-string>>
      */
-    private static array $implemented = [];
+    private static array $implemented = [
+        'payments' => ['razorpay' => Drivers\RazorpayGateway::class],
+        'video' => ['jitsi' => Drivers\JitsiVideo::class],
+        'ai' => ['anthropic' => Drivers\AnthropicDrafting::class],
+    ];
 
     /** @return class-string|null the approved driver class, or null to stay switched off */
     public static function driverClass(string $service, string $driver): ?string

@@ -375,6 +375,12 @@ class AdminAndApiTest extends PracticeTestCase
             if (! str_starts_with($uri, 'api/v1/') || str_contains($uri, 'auth/') || $route->methods()[0] === 'GET') {
                 continue;
             }
+            if ($uri === 'api/v1/webhooks/razorpay') {
+                // Called by Razorpay with no user token; it checks the HMAC signature instead (ProviderDriversTest).
+                $this->assertNotContains('auth:sanctum', $route->gatherMiddleware());
+
+                continue;
+            }
             $this->assertContains('api.ability', $route->gatherMiddleware(), "{$uri} is missing the ability check");
         }
     }

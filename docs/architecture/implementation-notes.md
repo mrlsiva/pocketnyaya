@@ -24,6 +24,7 @@ The app connects as the local `root` account, not a limited account. This is for
 | Closing a practice (2026-11-09) | **Built in all 7 stages, with final deletion switched off** until retention rules are approved. At retention the practice is marked closed and deleted, and its data is kept. The export holds records and decrypted documents |
 | Credit notes (2026-11-09) | **Own CN series, and they reduce the original's balance**, with tax reversed in proportion. A CA may correct this |
 | Phase 4 integrations (2026-11-09) | **Switched-off adapters** behind interfaces. Nothing calls out until a driver is approved |
+| Providers (2026-11-10) | **Anthropic Claude** for AI drafting, **Razorpay** for payment links, **Jitsi** for video. Built and tested with fakes, switched off until keys are set. SMS and Aadhaar eSign are skipped for now |
 | Isolation layer (2026-11-09) | **Two connections.** The main connection uses the `v_` prefix as `pn_app`, so every table resolves to its filtered view. Staff screens, console jobs and the practice export use the `platform` connection as `pn_platform`. It switches on with `DB_ISOLATION=true` once both accounts exist |
 | Subscriptions (2026-11-09) | **No plan means no limits.** Plans can limit members (pending invitations count), open matters and document storage. Limits stop new additions only |
 | Retention (2026-11-09) | **Nightly dry run, two-person disposal.** Supported categories: `closed_practice_documents` (crypto-shred) and `closed_practice_clients` (anonymise), counted from the new `tenant_closure` trigger |
@@ -101,13 +102,13 @@ These follow from the MySQL-era design. Re-check them on the production MariaDB 
 
 ### Needs credentials, legal checks or later phases
 
-Adapters exist for all of these, switched off (Staff → Integrations).
+Adapters exist for all of these, switched off (Staff → Integrations). Drivers for the three chosen providers are built (2026-11-10); they need keys and the checks in the production guide, section 13.
 
-- AI drafting and summarisation (the section O tables aren't migrated). PII masking runs locally, by pattern
+- AI drafting and summarisation: the Anthropic driver and the practice Drafting assistant are built. Nothing is stored, so the section O tables aren't migrated. Masking runs locally, by pattern, and misses names and addresses
 - NJDG or eCourts sync
 - Aadhaar eSign and DSC. Settlements stop at recorded acceptance, unsigned
-- Video calls. "Create meeting link" explains that it isn't set up
-- Payment gateway. "Create payment link" explains that it isn't set up, and payments are recorded by hand
+- Video calls: the Jitsi driver makes random room links. It needs a self-hosted server in India for production
+- Payment gateway: the Razorpay driver makes payment links, and its signed webhook records payments. It needs keys and a webhook set up in Razorpay
 - Push sending through Firebase, SMS and live email. Real-time updates in the browser and app use Laravel Reverb (built 2026-11-10)
 - Malware scanning. Files record `scan_status = skipped`
 - KMS and key escrow. `LocalKeyProvider` is development only, and losing its files loses the documents

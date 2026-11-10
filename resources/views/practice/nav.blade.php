@@ -17,6 +17,9 @@
     @if (\App\Support\AccessContext::tenantCan($u, 'knowledge.view'))
         <li class="nav-item"><a class="nav-link {{ request()->routeIs('practice.knowledge.*') ? 'active' : '' }}" href="{{ route('practice.knowledge.index') }}">Knowledge</a></li>
     @endif
+    @if (\App\Support\AccessContext::tenantCan($u, 'knowledge.contribute') || \App\Support\AccessContext::tenantCan($u, 'knowledge.approve'))
+        <li class="nav-item"><a class="nav-link {{ request()->routeIs('practice.ai.*') ? 'active' : '' }}" href="{{ route('practice.ai.index') }}">Drafting assistant</a></li>
+    @endif
     @if (\App\Support\AccessContext::tenantCan($u, 'tenant.audit.view'))
         <li class="nav-item"><a class="nav-link {{ request()->routeIs('practice.audit') ? 'active' : '' }}" href="{{ route('practice.audit') }}">Audit log</a></li>
     @endif

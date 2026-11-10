@@ -20,6 +20,7 @@ use App\Http\Controllers\Web\ForumController;
 use App\Http\Controllers\Web\InvitationController;
 use App\Http\Controllers\Web\OdrController;
 use App\Http\Controllers\Web\OffboardingExportController;
+use App\Http\Controllers\Web\Practice\AiDraftController;
 use App\Http\Controllers\Web\Practice\ClientController;
 use App\Http\Controllers\Web\Practice\DiaryController;
 use App\Http\Controllers\Web\Practice\KnowledgeController;
@@ -275,6 +276,11 @@ Route::middleware(['auth', 'active'])->group(function () {
                 Route::post('knowledge/{item}/approve', [KnowledgeController::class, 'approve'])->name('knowledge.approve');
                 Route::post('knowledge/{item}/archive', [KnowledgeController::class, 'archive'])->name('knowledge.archive');
                 Route::get('knowledge/{item}/download', [KnowledgeController::class, 'download'])->name('knowledge.download');
+            });
+            Route::middleware('pn.can:knowledge.contribute|knowledge.approve')->group(function () {
+                Route::get('ai', [AiDraftController::class, 'index'])->name('ai.index');
+                Route::post('ai/draft', [AiDraftController::class, 'draft'])->middleware('throttle:20,1')->name('ai.draft');
+                Route::post('ai/summary', [AiDraftController::class, 'summarise'])->middleware('throttle:20,1')->name('ai.summarise');
             });
             Route::get('audit', [DashboardController::class, 'tenantAudit'])->middleware('pn.can:tenant.audit.view')->name('audit');
 

@@ -152,7 +152,7 @@
                 <h2 class="h6">Sessions</h2>
                 @forelse ($sessions as $session)
                     <div class="small py-1 border-bottom">{{ $session->scheduled_at->format('d M Y H:i') }} · {{ str_replace('_', ' ', $session->mode) }} · {{ $session->duration_minutes }} min · {{ str_replace('_', ' ', $session->status) }}
-                        @if ($session->meeting_ref)<div>Meeting: {{ $session->meeting_ref }}</div>@endif
+                        @if ($session->meeting_ref)<div>Meeting: @if (str_starts_with($session->meeting_ref, 'https://'))<a href="{{ $session->meeting_ref }}" target="_blank" rel="noopener noreferrer">Join the video meeting</a>@else{{ $session->meeting_ref }}@endif</div>@endif
                         @if ($isMediator && $session->status === 'scheduled')
                             @unless ($session->meeting_ref)
                                 <form class="mt-1" method="post" action="{{ route('citizen.odr.sessions.meeting', [$dispute, $session]) }}">@csrf

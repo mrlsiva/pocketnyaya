@@ -39,7 +39,7 @@ Values are set on the server only, never committed, and never pasted into chat o
 | `LOG_CHANNEL` | `daily`, with logs shipped to the monitoring service |
 | `DB_ISOLATION` | `false` until both accounts exist (section 4), then `true` |
 | `PLATFORM_DB_USERNAME`, `PLATFORM_DB_PASSWORD` | `pn_platform`, for staff screens, jobs and the practice export |
-| `PAYMENTS_DRIVER`, `VIDEO_DRIVER`, `ESIGN_DRIVER`, `COURT_DATA_DRIVER`, `AI_DRIVER`, `MESSAGING_DRIVER` | `none` until each service is approved |
+| `PAYMENTS_DRIVER`, `VIDEO_DRIVER`, `ESIGN_DRIVER`, `COURT_DATA_DRIVER`, `AI_DRIVER`, `MESSAGING_DRIVER` | `none` until each service is approved. Built drivers: `razorpay`, `jitsi` and `anthropic` (section 13) |
 
 ## 3. Environment setup
 
@@ -134,3 +134,15 @@ All copies stay in an Indian region, with one copy in a second region inside Ind
 - [ ] The backup ran, and a restore test passed
 - [ ] Every integration shows "Switched off" until approved
 - [ ] The penetration test findings are closed
+
+## 13. Outside service connectors
+
+The owner chose these providers on 2026-11-10. Each is built and tested with fake responses only, and stays switched off until its driver name and credentials are set. Before switching one on, check its cost, data location and contract terms. SMS and Aadhaar eSign are not built yet.
+
+| Service | Set in `.env` | Notes |
+|---|---|---|
+| Payments (Razorpay Payment Links) | `PAYMENTS_DRIVER=razorpay`, `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET` | All three are needed. In the Razorpay dashboard, add a webhook to `https://<host>/api/v1/webhooks/razorpay` for the `payment_link.paid` event, with the same secret. Only the invoice number and amount are sent; Razorpay sends the client nothing. A paid link records a `gateway` payment once per Razorpay payment id. A payment that no longer fits the balance is logged for a person to handle. Start with test keys (`rzp_test_`) |
+| Video (Jitsi) | `VIDEO_DRIVER=jitsi`, `JITSI_BASE_URL` | Links use a long random room name. `meet.jit.si` is for testing only: it is hosted outside India and now asks the first person to sign in. For production, run Jitsi on a server in India and switch on its lobby or room passwords |
+| AI drafting (Anthropic Claude) | `AI_DRIVER=anthropic`, `ANTHROPIC_API_KEY`, optional `ANTHROPIC_MODEL` (default `claude-opus-5-5`) | Used by the practice Drafting assistant. Identifiers are masked on this server first, but names and addresses are not, and processing happens outside India. Get the DPDP and Bar Council position reviewed before real client text is used. Nothing typed is stored; the audit log records only use and length |
+
+To switch one off again, set its driver back to `none` and run `php artisan config:cache`.

@@ -7,6 +7,7 @@ use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetCitizenContext;
 use App\Http\Middleware\SetStaffContext;
 use App\Http\Middleware\SetTenantContext;
+use App\Integrations\IntegrationFailed;
 use App\Integrations\IntegrationNotConfigured;
 use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
 use Illuminate\Foundation\Application;
@@ -61,5 +62,10 @@ return Application::configure(basePath: dirname(__DIR__))
             return $request->is('api/*') || $request->expectsJson()
                 ? response()->json(['message' => $e->getMessage(), 'integration' => $e->integration], 503)
                 : back()->withErrors(['integration' => $e->getMessage()]);
+        });
+        $exceptions->render(function (IntegrationFailed $e, Request $request) {
+            return $request->is('api/*') || $request->expectsJson()
+                ? response()->json(['message' => $e->getMessage(), 'integration' => $e->integration], 502)
+                : back()->withInput()->withErrors(['integration' => $e->getMessage()]);
         });
     })->create();

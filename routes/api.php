@@ -9,11 +9,14 @@ use App\Http\Controllers\Api\V1\OdrController;
 use App\Http\Controllers\Api\V1\PingController;
 use App\Http\Controllers\Api\V1\PracticeController;
 use App\Http\Controllers\Api\V1\PublicController;
+use App\Http\Controllers\Api\V1\RazorpayWebhookController;
 use App\Http\Controllers\Api\V1\TeamController;
 use App\Http\Controllers\Api\V1\VerificationController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('ping', PingController::class)->name('api.v1.ping');
+// Signed by Razorpay, not by a user. Returns 404 unless Razorpay is the payment driver.
+Route::post('webhooks/razorpay', RazorpayWebhookController::class)->middleware('throttle:120,1')->name('api.v1.webhooks.razorpay');
 Route::get('directory/advocates', [PublicController::class, 'advocates']);
 Route::get('directory/advocates/{advocate}', [PublicController::class, 'advocate']);
 Route::get('forum/questions', [CommunityController::class, 'questions']);

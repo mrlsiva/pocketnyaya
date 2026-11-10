@@ -279,7 +279,7 @@ class InvoiceService
     /**
      * Records a payment and allocates it to one invoice, with the invoice row locked.
      *
-     * @param  array{amount: string, payment_date: string, method: string, reference_number?: string|null, tds_amount?: string|null}  $data
+     * @param  array{amount: string, payment_date: string, method: string, reference_number?: string|null, tds_amount?: string|null, gateway_transaction_id?: string|null}  $data
      */
     public function recordPayment(Invoice $invoice, User $user, array $data): Payment
     {
@@ -297,7 +297,10 @@ class InvoiceService
             }
 
             $payment = new Payment(['amount' => $data['amount'], 'payment_date' => $data['payment_date'], 'method' => $data['method'], 'reference_number' => $data['reference_number'] ?? null]);
-            $payment->forceFill(['tenant_id' => $locked->tenant_id, 'client_id' => $locked->client_id, 'status' => 'recorded', 'received_by' => $user->id])->save();
+            $payment->forceFill([
+                'tenant_id' => $locked->tenant_id, 'client_id' => $locked->client_id, 'status' => 'recorded', 'received_by' => $user->id,
+                'gateway_transaction_id' => $data['gateway_transaction_id'] ?? null,
+            ])->save();
 
             $allocation = new PaymentAllocation;
             $allocation->forceFill([
