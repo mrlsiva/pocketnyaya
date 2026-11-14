@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Documents\UploadDocumentRequest;
+use App\Integrations\Contracts\VideoProvider;
 use App\Models\Document;
 use App\Models\OdrDispute;
 use App\Models\OdrMediatorAssignment;
@@ -83,7 +84,7 @@ class OdrController extends Controller
                 ->map(fn (OdrMessage $m) => ['id' => $m->id, 'type' => $m->message_type, 'visibility' => $m->visibility, 'sender_participant_id' => $m->sender_participant_id,
                     'from_mediator' => $m->sender_mediator_profile_id !== null, 'private_with_participant_id' => $m->private_with_participant_id, 'body' => $m->body, 'document_id' => $m->document_id, 'created_at' => $m->created_at]),
             'offers' => OdrOffer::query()->where('dispute_id', $dispute->id)->latest()->get(['id', 'offered_by_participant_id', 'amount', 'terms', 'status']),
-            'sessions' => OdrSession::query()->where('dispute_id', $dispute->id)->orderBy('scheduled_at')->get(['id', 'scheduled_at', 'duration_minutes', 'mode', 'status']),
+            'sessions' => OdrSession::query()->where('dispute_id', $dispute->id)->orderBy('scheduled_at')->get(['id', 'scheduled_at', 'duration_minutes', 'mode', 'status', 'meeting_ref']),
             'settlement' => OdrSettlement::query()->where('dispute_id', $dispute->id)->latest('version_number')->first(['id', 'version_number', 'terms', 'status', 'document_id']),
             'settlement_label' => 'Settlement agreement (unsigned)',
             'templates' => $isMediator ? SettlementTemplate::query()->where(['category' => $dispute->category, 'legal_review_status' => 'reviewed'])->get(['id', 'title', 'version']) : [],
@@ -267,6 +268,52 @@ class OdrController extends Controller
         abort_if($version->isShredded(), 410);
 
         return $vault->download($document, $version, $user);
+    }
+
+    /** A party invites their own counsel by email. */
+    public function inviteCounsel(Request $request, OdrDispute $dispute): JsonResponse
+    {
+        $party = $this->participantOr404($request, $dispute);
+        abort_unless(AccessContext::citizenCan($this->user($request), 'odr.participate'), 403);
+        $data = $request->validate(['name' => ['required', 'string', 'max:150'], 'email' => ['required', 'email', 'max:255']]);
+        $this->odr->inviteCounsel($dispute, $party, $data['name'], $data['email']);
+
+        return response()->json(['message' => 'Invitation sent to your counsel.'], 201);
+    }
+
+    public function removeCounsel(Request $request, OdrDispute $dispute, OdrParticipant $participant): JsonResponse
+    {
+        $this->odr->removeCounsel($dispute, $this->participantOr404($request, $dispute), $participant);
+
+        return response()->json(['message' => 'Counsel removed.']);
+    }
+
+    /** The claimant withdraws the dispute. */
+    public function withdraw(Request $request, OdrDispute $dispute): JsonResponse
+    {
+        $user = $this->user($request);
+        abort_unless($dispute->claimant_user_id === $user->id && AccessContext::citizenCan($user, 'odr.disputes.create'), 404);
+        $this->odr->withdraw($dispute);
+
+        return response()->json($this->summary($dispute->fresh() ?? $dispute));
+    }
+
+    /** Step 23. 503 until a video service is switched on. */
+    public function meeting(Request $request, OdrDispute $dispute, OdrSession $session, VideoProvider $video): JsonResponse
+    {
+        $this->mediatorOnly($request, $dispute, 'odr.sessions.manage');
+        abort_unless($session->dispute_id === $dispute->id && $session->status === 'scheduled', 404);
+        $session->forceFill(['meeting_ref' => $video->createMeeting($session)])->save();
+
+        return response()->json(['session_id' => $session->id, 'meeting_ref' => $session->meeting_ref], 201);
+    }
+
+    private function participantOr404(Request $request, OdrDispute $dispute): OdrParticipant
+    {
+        $me = OdrAccess::participant($this->user($request), $dispute);
+        abort_if($me === null, 404);
+
+        return $me;
     }
 
     private function mediatorOnly(Request $request, OdrDispute $dispute, string $permission): void

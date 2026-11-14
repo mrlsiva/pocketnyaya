@@ -37,10 +37,18 @@ class CommunityController extends Controller
     {
         abort_unless($question->status === 'published', 404);
 
+        $answers = $question->answers()->with('advocate.user:id,name')->where('status', 'published')->orderBy('published_at')->get();
+        // Published comments only, without their authors' names, as on the web page.
+        $comments = DB::table('forum_comments')->whereIn('commentable_id', $answers->pluck('id')->push($question->id))
+            ->where('status', 'published')->whereNull('deleted_at')->orderBy('created_at')->get(['id', 'commentable_id', 'body', 'created_at'])->groupBy('commentable_id');
+
         return response()->json($this->question($question) + [
             'body' => $question->body,
-            'answers' => $question->answers()->with('advocate.user:id,name')->where('status', 'published')->orderBy('published_at')->get()
-                ->map(fn (ForumAnswer $a) => ['id' => $a->id, 'body' => $a->body, 'advocate' => $a->advocate?->user?->name, 'published_at' => $a->published_at]),
+            'comments' => $comments->get($question->id, collect())->values(),
+            'answers' => $answers->map(fn (ForumAnswer $a) => [
+                'id' => $a->id, 'body' => $a->body, 'advocate' => $a->advocate?->user?->name, 'published_at' => $a->published_at,
+                'comments' => $comments->get($a->id, collect())->values(),
+            ]),
         ]);
     }
 

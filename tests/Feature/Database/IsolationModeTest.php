@@ -165,6 +165,15 @@ class IsolationModeTest extends PracticeTestCase
         $this->getJson('/api/v1/me/workspaces')->assertOk();
         $this->getJson('/api/v1/matters', ['X-Tenant-ID' => $this->firm])->assertOk()->assertSee('Visible Matter')->assertDontSee('Hidden Matter');
         $this->getJson("/api/v1/matters/{$this->otherMatterId}", ['X-Tenant-ID' => $this->firm])->assertNotFound();
+
+        // The read endpoints added for the app, through the views.
+        $mine = (string) DB::connection('platform')->table('matters')->where('tenant_id', $this->firm)->value('id');
+        foreach (['/api/v1/reports', '/api/v1/calendar', '/api/v1/practice/settings', '/api/v1/practice/consultations', '/api/v1/fees', '/api/v1/retainers',
+            '/api/v1/expenses', '/api/v1/time-entries/team', '/api/v1/practice/audit', '/api/v1/practice/folders', '/api/v1/diary/entries',
+            "/api/v1/matters/{$mine}/allocation", "/api/v1/matters/{$mine}/assignments", "/api/v1/matters/{$mine}/parties"] as $url) {
+            $this->getJson($url, ['X-Tenant-ID' => $this->firm])->assertOk();
+        }
+        $this->getJson("/api/v1/matters/{$this->otherMatterId}/allocation", ['X-Tenant-ID' => $this->firm])->assertNotFound();
     }
 
     public function test_staff_pages_use_the_platform_connection(): void
