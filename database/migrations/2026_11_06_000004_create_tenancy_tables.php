@@ -36,9 +36,10 @@ return new class extends Migration
 
             // Generated columns replace PostgreSQL partial unique indexes (MY design).
             $table->tinyInteger('platform_marker')->storedAs("IF(type = 'platform', 1, NULL)");
-            $table->char('solo_owner_key', 36)->charset('ascii')->collation('ascii_bin')
-                ->storedAs("IF(type = 'solo' AND deleted_at IS NULL, owner_user_id, NULL)");
-            $table->string('active_gstin', 15)->storedAs('IF(deleted_at IS NULL, gstin, NULL)');
+            // Keys that read a date/time column are filled by triggers (keyTriggers below):
+            // MariaDB 10.11 refuses stored or indexed generated columns over them (error 1901).
+            $table->char('solo_owner_key', 36)->charset('ascii')->collation('ascii_bin')->nullable();
+            $table->string('active_gstin', 15)->nullable();
 
             $table->foreign('owner_user_id')->references('id')->on('users');
             $table->foreign('state_code')->references('code')->on('states');
@@ -46,6 +47,7 @@ return new class extends Migration
             $table->unique('solo_owner_key');
             $table->unique('active_gstin');
         });
+        $this->keyTriggers('tenants', "NEW.solo_owner_key = IF(NEW.type = 'solo' AND NEW.deleted_at IS NULL, NEW.owner_user_id, NULL), NEW.active_gstin = IF(NEW.deleted_at IS NULL, NEW.gstin, NULL)");
         DB::statement("ALTER TABLE tenants ADD CONSTRAINT tenants_type_chk CHECK (type IN ('platform','solo','firm'))");
         DB::statement("ALTER TABLE tenants ADD CONSTRAINT tenants_gst_type_chk CHECK (gst_registration_type IN ('unregistered','regular','composition'))");
         DB::statement("ALTER TABLE tenants ADD CONSTRAINT tenants_status_chk CHECK (status IN ('active','suspended','closed'))");
@@ -63,14 +65,14 @@ return new class extends Migration
             $table->string('pincode', 6)->nullable();
             $table->softDeletesDatetime('deleted_at', 6);
             $table->datetimes(6);
-            $table->char('head_office_key', 36)->charset('ascii')->collation('ascii_bin')
-                ->storedAs('IF(is_head_office = 1 AND deleted_at IS NULL, tenant_id, NULL)');
+            $table->char('head_office_key', 36)->charset('ascii')->collation('ascii_bin')->nullable(); // set by trigger
 
             $table->foreign('tenant_id')->references('id')->on('tenants');
             $table->foreign('state_code')->references('code')->on('states');
             $table->unique(['tenant_id', 'id']);
             $table->unique('head_office_key');
         });
+        $this->keyTriggers('tenant_branches', 'NEW.head_office_key = IF(NEW.is_head_office = 1 AND NEW.deleted_at IS NULL, NEW.tenant_id, NULL)');
 
         Schema::create('tenant_memberships', function (Blueprint $table) {
             $table->pnUuid('id')->primary();
@@ -110,8 +112,7 @@ return new class extends Migration
             $table->dateTime('accepted_at', 6)->nullable();
             $table->dateTime('revoked_at', 6)->nullable();
             $table->datetimes(6);
-            $table->string('pending_email')->collation('utf8mb4_bin')
-                ->storedAs('IF(accepted_at IS NULL AND revoked_at IS NULL, email, NULL)');
+            $table->string('pending_email')->collation('utf8mb4_bin')->nullable(); // set by trigger
 
             $table->unique(['tenant_id', 'id']);
             $table->unique(['tenant_id', 'pending_email'], 'invitations_pending_uq');
@@ -120,6 +121,7 @@ return new class extends Migration
             $table->foreign(['tenant_id', 'branch_id'], 'invitations_branch_fk')
                 ->references(['tenant_id', 'id'])->on('tenant_branches');
         });
+        $this->keyTriggers('tenant_invitations', 'NEW.pending_email = IF(NEW.accepted_at IS NULL AND NEW.revoked_at IS NULL, NEW.email, NULL)');
 
         Schema::create('practice_groups', function (Blueprint $table) {
             $table->pnUuid('id')->primary();
@@ -218,5 +220,13 @@ return new class extends Migration
         Schema::dropIfExists('tenant_memberships');
         Schema::dropIfExists('tenant_branches');
         Schema::dropIfExists('tenants');
+    }
+
+    /** Keeps derived unique-key columns in step with the row on every insert and update. */
+    private function keyTriggers(string $table, string $assignments): void
+    {
+        foreach (['INSERT' => 'bi', 'UPDATE' => 'bu'] as $event => $suffix) {
+            DB::unprepared("CREATE TRIGGER {$table}_keys_{$suffix} BEFORE {$event} ON {$table} FOR EACH ROW SET {$assignments}");
+        }
     }
 };

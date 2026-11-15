@@ -61,8 +61,8 @@ return new class extends Migration
             $table->dateTime('assigned_at', 6);
             $table->dateTime('unassigned_at', 6)->nullable();
             $table->datetimes(6);
-            $table->char('active_membership_id', 36)->charset('ascii')->collation('ascii_bin')
-                ->storedAs('IF(unassigned_at IS NULL, membership_id, NULL)');
+            // Set by trigger: MariaDB 10.11 refuses indexed generated columns that read a date/time column.
+            $table->char('active_membership_id', 36)->charset('ascii')->collation('ascii_bin')->nullable();
 
             $table->unique(['matter_id', 'active_membership_id'], 'assignments_active_uq');
             $table->index(['tenant_id', 'membership_id']);
@@ -70,6 +70,10 @@ return new class extends Migration
             $table->foreign(['tenant_id', 'matter_id'], 'assignments_matter_fk')->references(['tenant_id', 'id'])->on('matters');
             $table->foreign(['tenant_id', 'membership_id'], 'assignments_membership_fk')->references(['tenant_id', 'id'])->on('tenant_memberships');
         });
+        foreach (['INSERT' => 'bi', 'UPDATE' => 'bu'] as $event => $suffix) {
+            DB::unprepared("CREATE TRIGGER matter_assignments_keys_{$suffix} BEFORE {$event} ON matter_assignments FOR EACH ROW
+                SET NEW.active_membership_id = IF(NEW.unassigned_at IS NULL, NEW.membership_id, NULL)");
+        }
         DB::statement("ALTER TABLE matter_assignments ADD CONSTRAINT assignments_role_chk CHECK (role_on_matter IN ('lead','associate','junior','clerk','finance_viewer'))");
 
         Schema::create('matter_parties', function (Blueprint $table) {
