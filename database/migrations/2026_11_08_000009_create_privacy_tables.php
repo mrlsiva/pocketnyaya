@@ -222,10 +222,12 @@ return new class extends Migration
             $table->unsignedBigInteger('last_id');
             $table->char('root_hash', 64)->charset('ascii')->collation('ascii_bin');
             $table->dateTime('created_at', 6)->useCurrent();
-            $table->string('tenant_key', 36)->charset('ascii')->collation('ascii_bin')->storedAs("COALESCE(tenant_id, 'PLATFORM')");
+            $table->string('tenant_key', 36)->charset('ascii')->collation('ascii_bin')->nullable(); // set by trigger (MariaDB 10.11)
             $table->unique(['tenant_key', 'digest_date'], 'audit_digest_uq');
             $table->foreign('tenant_id')->references('id')->on('tenants');
         });
+        // Append-only below blocks updates, so only inserts need the key.
+        DB::unprepared("CREATE TRIGGER audit_digests_keys_bi BEFORE INSERT ON audit_digests FOR EACH ROW SET NEW.tenant_key = COALESCE(NEW.tenant_id, 'PLATFORM')");
 
         foreach (self::APPEND_ONLY as $name) {
             foreach (['UPDATE', 'DELETE'] as $event) {

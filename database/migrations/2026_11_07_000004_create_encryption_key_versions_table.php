@@ -24,10 +24,15 @@ return new class extends Migration
             $table->dateTime('retired_at', 6)->nullable();
             $table->datetimes(6);
             // Replaces the PostgreSQL partial unique index: one active key per purpose.
-            $table->string('active_purpose', 10)->storedAs("IF(status = 'active', purpose, NULL)");
+            // Set by trigger: MariaDB 10.11 refuses this as a stored generated column (error 1901).
+            $table->string('active_purpose', 10)->nullable();
 
             $table->unique('active_purpose');
         });
+        foreach (['INSERT' => 'bi', 'UPDATE' => 'bu'] as $event => $suffix) {
+            DB::unprepared("CREATE TRIGGER encryption_key_versions_keys_{$suffix} BEFORE {$event} ON encryption_key_versions FOR EACH ROW
+                SET NEW.active_purpose = IF(NEW.status = 'active', NEW.purpose, NULL)");
+        }
         DB::statement("ALTER TABLE encryption_key_versions ADD CONSTRAINT ekv_purpose_chk CHECK (purpose IN ('documents','journal'))");
         DB::statement("ALTER TABLE encryption_key_versions ADD CONSTRAINT ekv_provider_chk CHECK (provider IN ('local','kms'))");
         DB::statement("ALTER TABLE encryption_key_versions ADD CONSTRAINT ekv_status_chk CHECK (status IN ('active','decrypt_only','disabled','destroyed'))");

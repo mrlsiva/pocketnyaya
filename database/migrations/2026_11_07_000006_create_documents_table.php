@@ -35,8 +35,8 @@ return new class extends Migration
             $table->string('status', 10)->default('active');
             $table->softDeletesDatetime('deleted_at', 6);
             $table->datetimes(6);
-            $table->char('personal_owner_id', 36)->charset('ascii')->collation('ascii_bin')
-                ->storedAs("IF(scope = 'personal', owner_user_id, NULL)");
+            // Set by trigger: MariaDB 10.11 refuses this as a stored generated column (error 1901).
+            $table->char('personal_owner_id', 36)->charset('ascii')->collation('ascii_bin')->nullable();
 
             $table->unique(['tenant_id', 'id'], 'doc_tenant_id_uq');
             $table->index(['owner_user_id', 'scope'], 'doc_owner_scope_idx');
@@ -53,6 +53,11 @@ return new class extends Migration
             $table->foreign(['personal_owner_id', 'folder_id'], 'doc_folder_owner_fk')
                 ->references(['personal_owner_id', 'id'])->on('document_folders');
         });
+
+        foreach (['INSERT' => 'bi', 'UPDATE' => 'bu'] as $event => $suffix) {
+            DB::unprepared("CREATE TRIGGER documents_keys_{$suffix} BEFORE {$event} ON documents FOR EACH ROW
+                SET NEW.personal_owner_id = IF(NEW.scope = 'personal', NEW.owner_user_id, NULL)");
+        }
 
         $checks = [
             'doc_scope_values' => "scope IN ('tenant','personal','platform')",

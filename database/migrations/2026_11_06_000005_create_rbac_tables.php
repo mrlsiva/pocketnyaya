@@ -38,13 +38,16 @@ return new class extends Migration
             $table->boolean('requires_membership')->default(true);
             $table->datetimes(6);
             // Replaces the PostgreSQL partial unique index for global roles.
-            $table->string('team_key', 36)->charset('ascii')->collation('ascii_bin')
-                ->storedAs("COALESCE(team_id, 'GLOBAL')");
+            // Set by trigger: MariaDB 10.11 refuses this as a stored generated column (error 1901).
+            $table->string('team_key', 36)->charset('ascii')->collation('ascii_bin')->nullable();
 
             $table->index('team_id');
             $table->unique(['team_key', 'name', 'guard_name'], 'roles_team_name_guard_uq');
             $table->foreign('team_id')->references('id')->on('tenants');
         });
+        foreach (['INSERT' => 'bi', 'UPDATE' => 'bu'] as $event => $suffix) {
+            DB::unprepared("CREATE TRIGGER roles_keys_{$suffix} BEFORE {$event} ON roles FOR EACH ROW SET NEW.team_key = COALESCE(NEW.team_id, 'GLOBAL')");
+        }
         DB::statement("ALTER TABLE roles ADD CONSTRAINT roles_scope_chk CHECK (scope IN ('platform','tenant'))");
         DB::statement("ALTER TABLE roles ADD CONSTRAINT roles_custom_is_tenant_scope CHECK (team_id IS NULL OR scope = 'tenant')");
         DB::statement("ALTER TABLE roles ADD CONSTRAINT roles_tenant_needs_membership CHECK (scope = 'platform' OR requires_membership = 1)");

@@ -97,12 +97,18 @@ class DocumentSchemaTest extends DocumentTestCase
         $this->assertRejected(fn () => DB::table('document_folders')->where('id', $a->id)->update(['parent_id' => $a->id]), 'PN_FOLDER_CYCLE');
     }
 
-    public function test_generated_owner_column_cannot_be_written(): void
+    public function test_owner_key_column_cannot_be_forged(): void
     {
-        $this->assertRejected(fn () => DB::table('documents')->insert([
-            'id' => (string) Str::uuid(), 'scope' => 'personal', 'owner_user_id' => User::factory()->create()->id,
+        $owner = User::factory()->create()->id;
+        $id = (string) Str::uuid();
+        DB::table('documents')->insert([
+            'id' => $id, 'scope' => 'personal', 'owner_user_id' => $owner,
             'title' => 'T', 'category' => 'other', 'personal_owner_id' => (string) Str::uuid(),
-        ]), 'personal_owner_id');
+        ]);
+        $this->assertSame($owner, DB::table('documents')->where('id', $id)->value('personal_owner_id'));
+
+        DB::table('documents')->where('id', $id)->update(['personal_owner_id' => (string) Str::uuid()]);
+        $this->assertSame($owner, DB::table('documents')->where('id', $id)->value('personal_owner_id'));
     }
 
     // Documents: folders, arc and scope

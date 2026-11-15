@@ -40,7 +40,7 @@ return new class extends Migration
             $table->boolean('is_active')->default(false);
             $table->softDeletesDatetime('deleted_at', 6);
             $table->datetimes(6);
-            $table->string('tenant_key', 36)->charset('ascii')->collation('ascii_bin')->storedAs("COALESCE(tenant_id, 'PLATFORM')");
+            $table->string('tenant_key', 36)->charset('ascii')->collation('ascii_bin')->nullable(); // set by trigger (MariaDB 10.11)
 
             $table->unique(['tenant_key', 'code', 'effective_from'], 'tax_rules_code_uq');
             $table->index(['is_active', 'effective_from']);
@@ -48,6 +48,9 @@ return new class extends Migration
             $table->foreign('drafted_by')->references('id')->on('users');
             $table->foreign('approved_by')->references('id')->on('users');
         });
+        foreach (['INSERT' => 'bi', 'UPDATE' => 'bu'] as $event => $suffix) {
+            DB::unprepared("CREATE TRIGGER tax_rules_keys_{$suffix} BEFORE {$event} ON tax_rules FOR EACH ROW SET NEW.tenant_key = COALESCE(NEW.tenant_id, 'PLATFORM')");
+        }
         foreach ([
             "supplier_registration IN ('registered','unregistered','any')",
             "recipient_type IN ('individual','business','government','any')",

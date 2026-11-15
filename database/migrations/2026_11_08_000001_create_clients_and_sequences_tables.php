@@ -17,11 +17,14 @@ return new class extends Migration
             $table->string('period', 10);
             $table->unsignedBigInteger('next_value')->default(1);
             $table->datetimes(6);
-            $table->string('tenant_key', 36)->charset('ascii')->collation('ascii_bin')->storedAs("COALESCE(tenant_id, 'PLATFORM')");
+            $table->string('tenant_key', 36)->charset('ascii')->collation('ascii_bin')->nullable(); // set by trigger (MariaDB 10.11)
 
             $table->unique(['tenant_key', 'sequence_key', 'period'], 'number_sequences_uq');
             $table->foreign('tenant_id')->references('id')->on('tenants');
         });
+        foreach (['INSERT' => 'bi', 'UPDATE' => 'bu'] as $event => $suffix) {
+            DB::unprepared("CREATE TRIGGER number_sequences_keys_{$suffix} BEFORE {$event} ON number_sequences FOR EACH ROW SET NEW.tenant_key = COALESCE(NEW.tenant_id, 'PLATFORM')");
+        }
 
         Schema::create('clients', function (Blueprint $table) {
             $table->pnUuid('id')->primary();

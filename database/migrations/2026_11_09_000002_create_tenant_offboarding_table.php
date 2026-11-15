@@ -41,8 +41,8 @@ return new class extends Migration
             $table->dateTime('cancelled_at', 6)->nullable();
             $table->text('cancel_reason')->nullable();
             $table->datetimes(6);
-            $table->char('open_tenant_key', 36)->charset('ascii')->collation('ascii_bin')->nullable()
-                ->storedAs("IF(status IN ('requested','suspended','export_open'), tenant_id, NULL)");
+            // Set by trigger: MariaDB 10.11 refuses this as a stored generated column (error 1901).
+            $table->char('open_tenant_key', 36)->charset('ascii')->collation('ascii_bin')->nullable();
 
             $table->unique('open_tenant_key');
             $table->index(['tenant_id', 'status']);
@@ -51,6 +51,10 @@ return new class extends Migration
                 $table->foreign($column)->references('id')->on('users');
             }
         });
+        foreach (['INSERT' => 'bi', 'UPDATE' => 'bu'] as $event => $suffix) {
+            DB::unprepared("CREATE TRIGGER tenant_offboarding_keys_{$suffix} BEFORE {$event} ON tenant_offboarding FOR EACH ROW
+                SET NEW.open_tenant_key = IF(NEW.status IN ('requested','suspended','export_open'), NEW.tenant_id, NULL)");
+        }
         DB::statement("ALTER TABLE tenant_offboarding ADD CONSTRAINT offboarding_status_chk CHECK (status IN ('requested','suspended','export_open','retention','cancelled'))");
         DB::statement("ALTER TABLE tenant_offboarding ADD CONSTRAINT offboarding_disposal_chk CHECK (disposal_status IN ('not_started','blocked_no_rule','blocked_hold'))");
         DB::statement('ALTER TABLE tenant_offboarding ADD CONSTRAINT offboarding_two_person_chk CHECK (approved_by IS NULL OR approved_by <> requested_by)');

@@ -22,8 +22,8 @@ return new class extends Migration
             $table->string('name', 150);
             $table->softDeletesDatetime('deleted_at', 6);
             $table->datetimes(6);
-            $table->char('personal_owner_id', 36)->charset('ascii')->collation('ascii_bin')
-                ->storedAs("IF(scope = 'personal', owner_user_id, NULL)");
+            // Set by trigger: MariaDB 10.11 refuses this as a stored generated column (error 1901).
+            $table->char('personal_owner_id', 36)->charset('ascii')->collation('ascii_bin')->nullable();
 
             $table->unique(['id', 'scope'], 'df_id_scope_uq');
             $table->unique(['tenant_id', 'id'], 'df_tenant_id_uq');
@@ -37,6 +37,10 @@ return new class extends Migration
             $table->foreign(['personal_owner_id', 'parent_id'], 'df_parent_owner_fk')
                 ->references(['personal_owner_id', 'id'])->on('document_folders');
         });
+        foreach (['INSERT' => 'bi', 'UPDATE' => 'bu'] as $event => $suffix) {
+            DB::unprepared("CREATE TRIGGER document_folders_keys_{$suffix} BEFORE {$event} ON document_folders FOR EACH ROW
+                SET NEW.personal_owner_id = IF(NEW.scope = 'personal', NEW.owner_user_id, NULL)");
+        }
         DB::statement("ALTER TABLE document_folders ADD CONSTRAINT df_scope_values CHECK (scope IN ('tenant','personal'))");
         DB::statement("ALTER TABLE document_folders ADD CONSTRAINT df_scope_tenant CHECK ((scope = 'tenant') = (tenant_id IS NOT NULL))");
         DB::statement('ALTER TABLE document_folders ADD CONSTRAINT df_not_self_parent CHECK (parent_id IS NULL OR parent_id <> id)');
